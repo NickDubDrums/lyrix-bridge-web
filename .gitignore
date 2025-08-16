@@ -1,0 +1,11 @@
+# evita la cartella delle dipendenze Node
+node_modules/
+
+# evita i log temporanei
+*.log
+
+# evita file temporanei di sistema
+.DS_Store
+
+# evita variabili d’ambiente locali
+.env

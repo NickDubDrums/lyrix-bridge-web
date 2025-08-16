@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lyrix Bridge • Live</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Lyrix Bridge</h1>
+    <div id="status">
+      <span class="dot red" id="ws-dot"></span>
+      <span id="ws-text">WS: disconnected</span>
+    </div>
+  </header>
+
+  <nav>
+    <button class="tab active" data-tab="lyrics">Lyrics</button>
+    <button class="tab" data-tab="chords">Chords</button>
+    <div class="spacer"></div>
+    <label>Transpose:
+      <input type="range" id="transpose" min="-12" max="12" step="1" value="0" />
+      <span id="transposeValue">0</span>
+    </label>
+  </nav>
+
+  <main>
+    <section id="lyrics" class="panel show">
+      <div class="lyrics-container">
+        <div id="lyricsList"></div>
+      </div>
+      <div class="editor">
+        <h3>Carica / Modifica Lyrics (una riga per riga)</h3>
+        <textarea id="lyricsInput" rows="8" spellcheck="false"></textarea>
+        <button id="applyLyrics">Applica</button>
+      </div>
+    </section>
+
+    <section id="chords" class="panel">
+      <div class="chords-now">
+        <div class="label">Now</div>
+        <div id="chordNow" class="chord">—</div>
+      </div>
+      <div class="chords-next">
+        <div class="label">Next 4</div>
+        <div id="chordNext" class="next-grid"></div>
+      </div>
+
+      <div class="editor">
+        <h3>Timeline accordi (facoltativa, per “Next 4”)</h3>
+        <input id="songTitle" placeholder="Titolo brano" />
+        <textarea id="chordTimelineInput" rows="4" placeholder="Es: Em D G C Em D G G" spellcheck="false"></textarea>
+        <button id="applyTimeline">Applica Timeline</button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <small>Host WS: <code>ws://localhost:5173/sync</code> • OSC in: <code>udp 9000</code></small>
+  </footer>
+
+  <script src="./app.js" type="module"></script>
+</body>
+</html>
