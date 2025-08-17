@@ -388,8 +388,8 @@ function initPrefsControls() {
     localStorage.removeItem("chordsBg"); localStorage.removeItem("chordsFg"); localStorage.removeItem("chordsHi");
     localStorage.removeItem("chordsAlpha"); localStorage.removeItem("chordsNowFont"); localStorage.removeItem("chordsNextFont");
     state.prefs = {
-      lyricsBg:"#111111", lyricsFg:"#ffffff", lyricsHi:"#67e8f9", lyricsAlpha:16, lyricsFont:64, lyricsDim:40,
-      chordsBg:"#0b0b0e", chordsFg:"#f2f2f2", chordsHi:"#67e8f9", chordsAlpha:12, chordsNowFont:64, chordsNextFont:22,
+      lyricsBg:"#111111", lyricsFg:"#f2f2f2", lyricsHi:"#277eff", lyricsAlpha:16, lyricsFont:64, lyricsDim:40,
+      chordsBg:"#0b0b0e", chordsFg:"#f2f2f2", chordsHi:"#277eff", chordsAlpha:12, chordsNowFont:64, chordsNextFont:22,
     };
     initPrefsControls();
     applyPrefs();

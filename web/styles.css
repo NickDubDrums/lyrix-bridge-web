@@ -1,8 +1,8 @@
 :root{
   /* LYRICS palette */
   --lyrics-bg: #111111;
-  --lyrics-fg: #ffffff;
-  --lyrics-hi: #67e8f9;
+  --lyrics-fg: #f2f2f2;
+  --lyrics-hi: #277eff;
   --lyrics-alpha: 16;
   --lyrics-font: 10rem;
   --lyrics-dim: 40;
@@ -10,7 +10,7 @@
   /* CHORDS palette */
   --chords-bg: #0b0b0e;
   --chords-fg: #f2f2f2;
-  --chords-hi: #67e8f9;
+  --chords-hi: #277eff;
   --chords-alpha: 12;
   --chords-now-font: 64;
   --chords-next-font: 22;
