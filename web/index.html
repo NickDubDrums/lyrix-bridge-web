@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1, viewport-fit=cover" />
   <title>Lyrix Bridge • Live</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -16,48 +16,145 @@
   </header>
 
   <nav>
-    <button class="tab active" data-tab="lyrics">Lyrics</button>
-    <button class="tab" data-tab="chords">Chords</button>
+    <button class="tab active" data-tab="lyrics">LYRICS</button>
+    <button class="tab" data-tab="chords">CHORDS</button>
+    <button class="tab" data-tab="setlist">SETLIST</button>
+    <button class="tab" data-tab="editor">EDITOR</button>
     <div class="spacer"></div>
-    <label>Transpose:
-      <input type="range" id="transpose" min="-12" max="12" step="1" value="0" />
-      <span id="transposeValue">0</span>
-    </label>
   </nav>
 
   <main>
+    <!-- LYRICS -->
     <section id="lyrics" class="panel show">
-      <div class="lyrics-container">
-        <div id="lyricsList"></div>
-      </div>
-      <div class="editor">
-        <h3>Carica / Modifica Lyrics (una riga per riga)</h3>
-        <textarea id="lyricsInput" rows="8" spellcheck="false"></textarea>
-        <button id="applyLyrics">Applica</button>
+      <div class="lyrics-stage" id="lyricsStage">
+        <div id="lyricsList" class="lyrics-list"></div>
       </div>
     </section>
 
+    <!-- CHORDS -->
     <section id="chords" class="panel">
-      <div class="chords-now">
-        <div class="label">Now</div>
-        <div id="chordNow" class="chord">—</div>
-      </div>
-      <div class="chords-next">
-        <div class="label">Next 4</div>
-        <div id="chordNext" class="next-grid"></div>
+      <div class="chords-toolbar">
+        <label>Transpose
+          <input type="range" id="transpose" min="-12" max="12" step="1" value="0" />
+          <span id="transposeValue">0</span>
+        </label>
       </div>
 
-      <div class="editor">
-        <h3>Timeline accordi (facoltativa, per “Next 4”)</h3>
-        <input id="songTitle" placeholder="Titolo brano" />
-        <textarea id="chordTimelineInput" rows="4" placeholder="Es: Em D G C Em D G G" spellcheck="false"></textarea>
-        <button id="applyTimeline">Applica Timeline</button>
+      <div class="chords-stage">
+        <div class="chords-now">
+          <div class="label">Now</div>
+          <div id="chordNow" class="chord">—</div>
+        </div>
+        <div class="chords-next">
+          <div class="label">Next 4</div>
+          <div id="chordNext" class="next-grid"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SETLIST -->
+    <section id="setlist" class="panel">
+      <div class="setlist-toolbar">
+        <button id="mockSetlist">Carica Setlist di esempio</button>
+        <button id="clearSetlist">Svuota</button>
+      </div>
+      <div id="setlistContainer" class="setlist"></div>
+    </section>
+
+    <!-- EDITOR -->
+    <section id="editor" class="panel">
+      <div class="grid-two">
+        <div>
+          <h3>Testo (una riga per riga)</h3>
+          <textarea id="lyricsInput" rows="10" spellcheck="false"></textarea>
+          <button id="applyLyrics">Applica Lyrics</button>
+        </div>
+        <div>
+          <h3>Timeline accordi (spazio-separated)</h3>
+          <textarea id="chordTimelineInput" rows="10" placeholder="Es: Em D G C Em D G G" spellcheck="false"></textarea>
+          <button id="applyTimeline">Applica Timeline</button>
+        </div>
+      </div>
+
+      <h3>Impostazioni LYRICS</h3>
+      <div class="grid-three">
+        <label>Colore sfondo
+          <span class="color-field">
+            <span class="color-swatch" id="lyBgSwatch"></span>
+            <input type="text" id="lyBgHex" placeholder="#FFF" />
+            <input type="color" id="lyBg" />
+          </span>
+        </label>
+        <label>Colore testo
+          <span class="color-field">
+            <span class="color-swatch" id="lyFgSwatch"></span>
+            <input type="text" id="lyFgHex" placeholder="#FFF" />
+            <input type="color" id="lyFg" />
+          </span>
+        </label>
+        <label>Colore evidenza
+          <span class="color-field">
+            <span class="color-swatch" id="lyHiSwatch"></span>
+            <input type="text" id="lyHiHex" placeholder="#FFF" />
+            <input type="color" id="lyHi" />
+          </span>
+        </label>
+
+        <label>Opacità evidenza (%)
+          <input type="range" id="lyAlpha" min="0" max="100" step="1" />
+        </label>
+        <label>Grandezza font (px)
+          <input type="range" id="lyFont" min="24" max="120" step="2" />
+        </label>
+        <label>Dim non-correnti (%)
+          <input type="range" id="lyDim" min="0" max="100" step="1" />
+        </label>
+      </div>
+
+      <h3>Impostazioni CHORDS</h3>
+      <div class="grid-three">
+        <label>Colore sfondo
+          <span class="color-field">
+            <span class="color-swatch" id="chBgSwatch"></span>
+            <input type="text" id="chBgHex" placeholder="#FFF" />
+            <input type="color" id="chBg" />
+          </span>
+        </label>
+        <label>Colore testo
+          <span class="color-field">
+            <span class="color-swatch" id="chFgSwatch"></span>
+            <input type="text" id="chFgHex" placeholder="#FFF" />
+            <input type="color" id="chFg" />
+          </span>
+        </label>
+        <label>Colore evidenza
+          <span class="color-field">
+            <span class="color-swatch" id="chHiSwatch"></span>
+            <input type="text" id="chHiHex" placeholder="#FFF" />
+            <input type="color" id="chHi" />
+          </span>
+        </label>
+
+        <label>Opacità evidenza (%)
+          <input type="range" id="chAlpha" min="0" max="100" step="1" />
+        </label>
+        <label>Grandezza (Now)
+          <input type="range" id="chNowFont" min="24" max="120" step="2" />
+        </label>
+        <label>Grandezza (Next)
+          <input type="range" id="chNextFont" min="16" max="48" step="1" />
+        </label>
+      </div>
+
+      <div class="editor-actions">
+        <button id="savePrefs">Salva preferenze (solo questo device)</button>
+        <button id="resetPrefs">Reset preferenze</button>
       </div>
     </section>
   </main>
 
   <footer>
-    <small>Host WS: <code>ws://localhost:5173/sync</code> • OSC in: <code>udp 9000</code></small>
+    <small>WS: <code>ws://host:5173/sync</code> • OSC in: <code>udp 9000</code></small>
   </footer>
 
   <script src="./app.js" type="module"></script>
