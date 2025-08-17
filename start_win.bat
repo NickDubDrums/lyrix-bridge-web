@@ -1,16 +1,16 @@
 @echo off
-REM Vai nella cartella di questo .bat
+REM === Sempre partire dalla cartella di questo .bat ===
 cd /d %~dp0
 
-echo === Check Node ===
-where node
+REM === 0) Controllo Node ===
+where node >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
   echo ERRORE: Node non trovato. Installa Node.js LTS da https://nodejs.org/
   pause
   exit /b 1
 )
 
-echo === Install deps se mancano ===
+REM === 1) Installa deps solo la prima volta ===
 if not exist node_modules (
   echo Primo avvio: eseguo npm install...
   npm install
@@ -21,8 +21,10 @@ if not exist node_modules (
   )
 )
 
-echo === Avvio server in primo piano (per vedere log) ===
-set PORT=5173
-node server.js
-echo (Se vedi errori sopra, inviameli)
-pause
+REM === 2) Avvio in background (minimizzato) nella cartella giusta ===
+REM Nota: il server usa 5173 di default, quindi non servo passare PORT.
+REM Se vuoi cambiarla, aggiungi: cmd /c "set PORT=5174 && node server.js"
+echo Avvio in background su http://localhost:5173 ...
+start "" /MIN /D "%~dp0" cmd /c "node server.js"
+
+echo Avviato. Apri http://localhost:5173
