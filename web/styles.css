@@ -1,10 +1,10 @@
 :root{
   /* LYRICS palette */
-  --lyrics-bg: #000000;
+  --lyrics-bg: #111111;
   --lyrics-fg: #ffffff;
   --lyrics-hi: #67e8f9;
   --lyrics-alpha: 16;
-  --lyrics-font: 64;
+  --lyrics-font: 10rem;
   --lyrics-dim: 40;
 
   /* CHORDS palette */
@@ -19,7 +19,9 @@
   --ok: #49d17a;
   --danger: #ff6b6b;
   --muted: #9aa0a6;
-  --border: #1d2630;
+  --border: #252525;
+  --highligths: #277eff;
+  --text: #f2f2f2;
 }
 
 *{box-sizing:border-box}
@@ -27,7 +29,7 @@ html,body{height:100%}
 body{
   margin:0;
   font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,'Helvetica Neue',Arial;
-  background:#0b0b0e;
+  background:#171818;
   color:#f2f2f2;
 }
 
@@ -39,14 +41,19 @@ header h1{font-size:18px;margin:0}
 .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
 .dot.red{background:var(--danger)} .dot.green{background:var(--ok)}
 
-nav{display:flex;align-items:center;gap:8px}
+nav{display:flex;align-items:center;gap:8px;}
 nav .spacer{flex:1}
 .tab{background:transparent;color:#fff;border:1px solid var(--border);padding:6px 10px;border-radius:6px;cursor:pointer}
-.tab.active{border-color:#67e8f9;color:#67e8f9}
+.tab.active{border-color:var(--highligths);color:var(--highligths)}
 
 main{padding:16px}
 .panel{display:none}
 .panel.show{display:block}
+.edit-options{
+    border-top: var(--border) solid 1px;
+    margin-top: 25px;
+    
+}
 
 /* -------- LYRICS -------- */
 .lyrics-stage{
@@ -117,7 +124,7 @@ main{padding:16px}
 .setlist .song{
   background:#11141a;border:1px solid var(--border);border-radius:8px;padding:10px;cursor:pointer;
 }
-.setlist .song.active{outline:2px solid #67e8f9}
+.setlist .song.active{outline:2px solid var(--highligths)}
 .setlist .song .title{font-weight:600;margin-bottom:4px}
 .setlist .song small{color:var(--muted)}
 
@@ -125,9 +132,9 @@ main{padding:16px}
 .grid-two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .grid-three{display:grid;grid-template-columns:repeat(3, minmax(180px,1fr));gap:12px;align-items:center}
 textarea, input{
-  width:100%; padding:8px; background:#0e1013; color:#fff; border:1px solid var(--border); border-radius:6px;
+  width:100%; padding:8px; background:#111111; color:#fff; border:1px solid var(--border); border-radius:6px;
 }
-button{background:#67e8f9;color:#001018;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
+button{background:var(--highligths);color:var(--text);border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
 .editor-actions{margin-top:12px;display:flex;gap:8px}
 
 /* === Responsive tweaks === */

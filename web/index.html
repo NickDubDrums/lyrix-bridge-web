@@ -55,8 +55,8 @@
     <!-- SETLIST -->
     <section id="setlist" class="panel">
       <div class="setlist-toolbar">
-        <button id="mockSetlist">Carica Setlist di esempio</button>
-        <button id="clearSetlist">Svuota</button>
+        <button id="mockSetlist">Add Setlist</button>
+        <button id="clearSetlist">Delete setlist</button>
       </div>
       <div id="setlistContainer" class="setlist"></div>
     </section>
@@ -65,34 +65,34 @@
     <section id="editor" class="panel">
       <div class="grid-two">
         <div>
-          <h3>Testo (una riga per riga)</h3>
+          <h3>Lyrics (one line at a time)</h3>
           <textarea id="lyricsInput" rows="10" spellcheck="false"></textarea>
-          <button id="applyLyrics">Applica Lyrics</button>
+          <button id="applyLyrics">Apply Lyrics</button>
         </div>
         <div>
-          <h3>Timeline accordi (spazio-separated)</h3>
+          <h3>Timeline chords (space-separated)</h3>
           <textarea id="chordTimelineInput" rows="10" placeholder="Es: Em D G C Em D G G" spellcheck="false"></textarea>
-          <button id="applyTimeline">Applica Timeline</button>
+          <button id="applyTimeline">Apply Timeline</button>
         </div>
       </div>
-
-      <h3>Impostazioni LYRICS</h3>
+<section class="edit-options">
+      <h3>LYRICS Options</h3>
       <div class="grid-three">
-        <label>Colore sfondo
+        <label>BG Color
           <span class="color-field">
             <span class="color-swatch" id="lyBgSwatch"></span>
             <input type="text" id="lyBgHex" placeholder="#FFF" />
             <input type="color" id="lyBg" />
           </span>
         </label>
-        <label>Colore testo
+        <label>Text Color
           <span class="color-field">
             <span class="color-swatch" id="lyFgSwatch"></span>
             <input type="text" id="lyFgHex" placeholder="#FFF" />
             <input type="color" id="lyFg" />
           </span>
         </label>
-        <label>Colore evidenza
+        <label>Highlight Color
           <span class="color-field">
             <span class="color-swatch" id="lyHiSwatch"></span>
             <input type="text" id="lyHiHex" placeholder="#FFF" />
@@ -100,34 +100,35 @@
           </span>
         </label>
 
-        <label>Opacità evidenza (%)
+        <label>Highlight Opacity (%)
           <input type="range" id="lyAlpha" min="0" max="100" step="1" />
         </label>
-        <label>Grandezza font (px)
+        <label>Font Size (px)
           <input type="range" id="lyFont" min="24" max="120" step="2" />
         </label>
-        <label>Dim non-correnti (%)
+        <label>Non current line (%)
           <input type="range" id="lyDim" min="0" max="100" step="1" />
         </label>
       </div>
-
-      <h3>Impostazioni CHORDS</h3>
+    </section>
+<section class="edit-options">
+      <h3>CHORDS Options</h3>
       <div class="grid-three">
-        <label>Colore sfondo
+        <label>BG Color
           <span class="color-field">
             <span class="color-swatch" id="chBgSwatch"></span>
             <input type="text" id="chBgHex" placeholder="#FFF" />
             <input type="color" id="chBg" />
           </span>
         </label>
-        <label>Colore testo
+        <label>Text Color
           <span class="color-field">
             <span class="color-swatch" id="chFgSwatch"></span>
             <input type="text" id="chFgHex" placeholder="#FFF" />
             <input type="color" id="chFg" />
           </span>
         </label>
-        <label>Colore evidenza
+        <label>Highlight Color
           <span class="color-field">
             <span class="color-swatch" id="chHiSwatch"></span>
             <input type="text" id="chHiHex" placeholder="#FFF" />
@@ -135,21 +136,22 @@
           </span>
         </label>
 
-        <label>Opacità evidenza (%)
+        <label>Highlight Opacity (%)
           <input type="range" id="chAlpha" min="0" max="100" step="1" />
         </label>
-        <label>Grandezza (Now)
+        <label>Size (Now)
           <input type="range" id="chNowFont" min="24" max="120" step="2" />
         </label>
-        <label>Grandezza (Next)
+        <label>Size (Next)
           <input type="range" id="chNextFont" min="16" max="48" step="1" />
         </label>
       </div>
 
       <div class="editor-actions">
-        <button id="savePrefs">Salva preferenze (solo questo device)</button>
-        <button id="resetPrefs">Reset preferenze</button>
+        <button id="savePrefs">Save Preferences (in this device)</button>
+        <button id="resetPrefs">Reset Preferences</button>
       </div>
+      </section>
     </section>
   </main>
 

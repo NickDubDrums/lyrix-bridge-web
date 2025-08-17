@@ -5,7 +5,7 @@ const state = {
   // contenuti
   setlist: [],
   currentSongId: null,
-  lyrics: ["(incolla il testo in EDITOR)"],
+  lyrics: ["(Paste Lyrics in EDITOR)"],
   currentLyricIndex: 0,
   chordTimeline: [],
   currentChordIndex: -1,
@@ -14,16 +14,16 @@ const state = {
   transpose: Number(localStorage.getItem("transpose") || 0),
   // preferenze (CSS custom properties)
   prefs: {
-    lyricsBg: localStorage.getItem("lyricsBg") || "#000000",
-    lyricsFg: localStorage.getItem("lyricsFg") || "#ffffff",
-    lyricsHi: localStorage.getItem("lyricsHi") || "#67e8f9",
-    lyricsAlpha: Number(localStorage.getItem("lyricsAlpha") || 16),
+    lyricsBg: localStorage.getItem("lyricsBg") || "#111111",
+    lyricsFg: localStorage.getItem("lyricsFg") || "#f2f2f2",
+    lyricsHi: localStorage.getItem("lyricsHi") || "#277eff",
+    lyricsAlpha: Number(localStorage.getItem("lyricsAlpha") || 7),
     lyricsFont: Number(localStorage.getItem("lyricsFont") || 64),
     lyricsDim:  Number(localStorage.getItem("lyricsDim")  || 40),
-    chordsBg: localStorage.getItem("chordsBg") || "#0b0b0e",
+    chordsBg: localStorage.getItem("chordsBg") || "#111111",
     chordsFg: localStorage.getItem("chordsFg") || "#f2f2f2",
-    chordsHi: localStorage.getItem("chordsHi") || "#67e8f9",
-    chordsAlpha: Number(localStorage.getItem("chordsAlpha") || 12),
+    chordsHi: localStorage.getItem("chordsHi") || "#277eff",
+    chordsAlpha: Number(localStorage.getItem("chordsAlpha") || 7),
     chordsNowFont: Number(localStorage.getItem("chordsNowFont") || 64),
     chordsNextFont: Number(localStorage.getItem("chordsNextFont") || 22),
   }
@@ -388,7 +388,7 @@ function initPrefsControls() {
     localStorage.removeItem("chordsBg"); localStorage.removeItem("chordsFg"); localStorage.removeItem("chordsHi");
     localStorage.removeItem("chordsAlpha"); localStorage.removeItem("chordsNowFont"); localStorage.removeItem("chordsNextFont");
     state.prefs = {
-      lyricsBg:"#000000", lyricsFg:"#ffffff", lyricsHi:"#67e8f9", lyricsAlpha:16, lyricsFont:64, lyricsDim:40,
+      lyricsBg:"#111111", lyricsFg:"#ffffff", lyricsHi:"#67e8f9", lyricsAlpha:16, lyricsFont:64, lyricsDim:40,
       chordsBg:"#0b0b0e", chordsFg:"#f2f2f2", chordsHi:"#67e8f9", chordsAlpha:12, chordsNowFont:64, chordsNextFont:22,
     };
     initPrefsControls();
