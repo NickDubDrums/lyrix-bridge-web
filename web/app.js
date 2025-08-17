@@ -1,408 +1,447 @@
-// === Stato client ===
-const state = {
-  ws: null,
-  connected: false,
-  // contenuti
-  setlist: [],
-  currentSongId: null,
-  lyrics: ["(Paste Lyrics in EDITOR)"],
-  currentLyricIndex: 0,
-  chordTimeline: [],
-  currentChordIndex: -1,
-  chordNow: "—",
-  // transpose agisce solo sui CHORDS (UI è dentro il pannello CHORDS)
-  transpose: Number(localStorage.getItem("transpose") || 0),
-  // preferenze (CSS custom properties)
-  prefs: {
-    lyricsBg: localStorage.getItem("lyricsBg") || "#111111",
-    lyricsFg: localStorage.getItem("lyricsFg") || "#f2f2f2",
-    lyricsHi: localStorage.getItem("lyricsHi") || "#277eff",
-    lyricsAlpha: Number(localStorage.getItem("lyricsAlpha") || 7),
-    lyricsFont: Number(localStorage.getItem("lyricsFont") || 64),
-    lyricsDim:  Number(localStorage.getItem("lyricsDim")  || 40),
-    chordsBg: localStorage.getItem("chordsBg") || "#111111",
-    chordsFg: localStorage.getItem("chordsFg") || "#f2f2f2",
-    chordsHi: localStorage.getItem("chordsHi") || "#277eff",
-    chordsAlpha: Number(localStorage.getItem("chordsAlpha") || 7),
-    chordsNowFont: Number(localStorage.getItem("chordsNowFont") || 64),
-    chordsNextFont: Number(localStorage.getItem("chordsNextFont") || 22),
-  }
-};
+// app.js – Lyrix Bridge (client)
 
-// === Color HEX helpers ===
-const clampByte = n => Math.max(0, Math.min(255, n|0));
-const toHex2 = n => clampByte(n).toString(16).padStart(2, "0").toUpperCase();
-function rgbStringToHex(str){
-  const m = String(str||"").match(/rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
-  if(!m) return null;
-  const [_,r,g,b] = m;
-  return `#${toHex2(r)}${toHex2(g)}${toHex2(b)}`;
-}
-function expandTo6(hex){
-  const m = String(hex||"").match(/^#([0-9a-fA-F]{3})$/);
-  if(!m) return (hex||"").toUpperCase();
-  return ("#" + m[1].split("").map(ch=>ch+ch).join("")).toUpperCase();
-}
-function compressTo3Or6(hex6){
-  const m = String(hex6||"").toUpperCase().match(/^#([0-9A-F]{6})$/);
-  if(!m) return String(hex6||"").toUpperCase();
-  const [r1,r2,g1,g2,b1,b2] = m[1].split("");
-  const canShort = r1===r2 && g1===g2 && b1===b2;
-  return canShort ? `#${r1}${g1}${b1}` : ("#"+m[1]);
-}
-function normalizeHex(input){
-  if(!input) return "#FFFFFF";
-  const s = String(input).trim();
-  if(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(s)) return s.toUpperCase();
-  const conv = rgbStringToHex(s);
-  return conv ? conv : "#FFFFFF";
-}
+(() => {
+  // ---------------------------
+  // State + DOM refs
+  // ---------------------------
+  const $ = (id) => document.getElementById(id);
 
-// === Utilità accordi: trasposizione semplice tonica (solo CHORDS) ===
-const NOTES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
-function transposeSymbol(sym, semi) {
-  if (!sym || sym === "—" || sym === "?") return sym;
-  const m = String(sym).match(/^([A-G](?:#|b)?)(.*)$/);
-  if (!m) return sym;
-  const enh = { "Db":"C#", "Eb":"D#", "Gb":"F#", "Ab":"G#", "Bb":"A#" };
-  const rootSharp = enh[m[1]] || m[1];
-  const idx = NOTES.indexOf(rootSharp);
-  if (idx < 0) return sym;
-  let n = (idx + semi) % 12; if (n < 0) n += 12;
-  return NOTES[n] + m[2];
-}
-
-// === DOM refs ===
-const wsDot = document.getElementById("ws-dot");
-const wsText = document.getElementById("ws-text");
-const tabs = document.querySelectorAll(".tab");
-const panels = document.querySelectorAll(".panel");
-
-const lyricsList = document.getElementById("lyricsList");
-
-const chordNowEl = document.getElementById("chordNow");
-const chordNextEl = document.getElementById("chordNext");
-
-// transpose controlli sono dentro CHORDS
-const transpose = document.getElementById("transpose");
-const transposeValue = document.getElementById("transposeValue");
-
-const lyricsInput = document.getElementById("lyricsInput");
-const applyLyricsBtn = document.getElementById("applyLyrics");
-const chordTimelineInput = document.getElementById("chordTimelineInput");
-const applyTimelineBtn = document.getElementById("applyTimeline");
-
-const setlistContainer = document.getElementById("setlistContainer");
-const mockSetlistBtn = document.getElementById("mockSetlist");
-const clearSetlistBtn = document.getElementById("clearSetlist");
-
-const lyBg = document.getElementById("lyBg");
-const lyFg = document.getElementById("lyFg");
-const lyHi = document.getElementById("lyHi");
-const lyAlpha = document.getElementById("lyAlpha");
-const lyFont = document.getElementById("lyFont");
-const lyDim = document.getElementById("lyDim");
-
-const chBg = document.getElementById("chBg");
-const chFg = document.getElementById("chFg");
-const chHi = document.getElementById("chHi");
-const chAlpha = document.getElementById("chAlpha");
-const chNowFont = document.getElementById("chNowFont");
-const chNextFont = document.getElementById("chNextFont");
-
-const lyBgHex = document.getElementById("lyBgHex");
-const lyFgHex = document.getElementById("lyFgHex");
-const lyHiHex = document.getElementById("lyHiHex");
-const chBgHex = document.getElementById("chBgHex");
-const chFgHex = document.getElementById("chFgHex");
-const chHiHex = document.getElementById("chHiHex");
-const lyBgSwatch = document.getElementById("lyBgSwatch");
-const lyFgSwatch = document.getElementById("lyFgSwatch");
-const lyHiSwatch = document.getElementById("lyHiSwatch");
-const chBgSwatch = document.getElementById("chBgSwatch");
-const chFgSwatch = document.getElementById("chFgSwatch");
-const chHiSwatch = document.getElementById("chHiSwatch");
-
-// === Tabs ===
-tabs.forEach(btn => {
-  btn.addEventListener("click", () => {
-    tabs.forEach(b => b.classList.remove("active"));
-    panels.forEach(p => p.classList.remove("show"));
-    btn.classList.add("active");
-    const target = document.getElementById(btn.dataset.tab);
-    if (target) target.classList.add("show");
-  }, { passive: true });
-});
-
-// === Apply CSS prefs ===
-function applyPrefs() {
-  const r = document.documentElement.style;
-  const p = state.prefs;
-  r.setProperty("--lyrics-bg", p.lyricsBg);
-  r.setProperty("--lyrics-fg", p.lyricsFg);
-  r.setProperty("--lyrics-hi", p.lyricsHi);
-  r.setProperty("--lyrics-alpha", p.lyricsAlpha);
-  r.setProperty("--lyrics-font", p.lyricsFont);
-  r.setProperty("--lyrics-dim", p.lyricsDim);
-
-  r.setProperty("--chords-bg", p.chordsBg);
-  r.setProperty("--chords-fg", p.chordsFg);
-  r.setProperty("--chords-hi", p.chordsHi);
-  r.setProperty("--chords-alpha", p.chordsAlpha);
-  r.setProperty("--chords-now-font", p.chordsNowFont);
-  r.setProperty("--chords-next-font", p.chordsNextFont);
-
-  // swatch update
-  lyBgSwatch.style.backgroundColor = expandTo6(p.lyricsBg);
-  lyFgSwatch.style.backgroundColor = expandTo6(p.lyricsFg);
-  lyHiSwatch.style.backgroundColor = expandTo6(p.lyricsHi);
-  chBgSwatch.style.backgroundColor = expandTo6(p.chordsBg);
-  chFgSwatch.style.backgroundColor = expandTo6(p.chordsFg);
-  chHiSwatch.style.backgroundColor = expandTo6(p.chordsHi);
-}
-
-// === Lyrics render (mai trasposte) ===
-function renderLyrics(scrollToCurrent=false){
-  lyricsList.innerHTML = "";
-  state.lyrics.forEach((line, i) => {
-    const div = document.createElement("div");
-    div.className = "line" + (i === state.currentLyricIndex ? " current" : "");
-    div.textContent = line; // <— nessuna trasposizione
-    lyricsList.appendChild(div);
-  });
-  if (scrollToCurrent) {
-    const cur = lyricsList.querySelector(".current");
-    if (cur) cur.scrollIntoView({ block:"center", behavior:"smooth" });
-  }
-}
-
-// === CHORDS (le uniche a usare transpose) ===
-function renderChordNow(){
-  chordNowEl.textContent = transposeSymbol(state.chordNow, state.transpose);
-}
-function renderChordNext(){
-  chordNextEl.innerHTML = "";
-  const arr = state.chordTimeline.slice(state.currentChordIndex+1, state.currentChordIndex+5);
-  arr.forEach(c => {
-    const cell = document.createElement("div");
-    cell.className = "cell";
-    cell.textContent = transposeSymbol(c, state.transpose);
-    chordNextEl.appendChild(cell);
-  });
-}
-
-// === WebSocket connect ===
-function connectWS() {
-  const url = `ws://${location.host}/sync`;
-  try {
-    state.ws = new WebSocket(url);
-  } catch (_) {
-    // dev senza WS
-    return;
-  }
-
-  state.ws.addEventListener("open", () => {
-    state.connected = true;
-    wsDot.classList.remove("red"); wsDot.classList.add("green");
-    wsText.textContent = "WS: connected";
-  });
-  state.ws.addEventListener("close", () => {
-    state.connected = false;
-    wsDot.classList.remove("green"); wsDot.classList.add("red");
-    wsText.textContent = "WS: disconnected";
-    setTimeout(connectWS, 1000);
-  });
-  state.ws.addEventListener("message", (ev) => {
-    const msg = JSON.parse(ev.data);
-    if (msg.type === "state") {
-      const s = msg.state || {};
-      state.setlist = Array.isArray(s.setlist) ? s.setlist : [];
-      state.currentSongId = s.currentSongId || null;
-
-      if (s.currentSong) {
-        state.lyrics = s.currentSong.lyrics || [];
-        state.chordTimeline = s.currentSong.chordTimeline || [];
-      }
-
-      state.currentLyricIndex = Number(s.currentLyricIndex ?? state.currentLyricIndex);
-      state.currentChordIndex = Number(s.currentChordIndex ?? state.currentChordIndex);
-      state.chordNow = s.chordNow || state.chordNow;
-
-      renderSetlist();
-      renderLyrics(true);
-      renderChordNow();
-      renderChordNext();
-    }
-
-    if (msg.type === "lyrics/currentIndex") {
-      state.currentLyricIndex = Number(msg.value || 0);
-      renderLyrics(true);
-    }
-    if (msg.type === "chord/current") {
-      state.chordNow = msg.value || "—";
-      renderChordNow();
-      renderChordNext();
-    }
-    if (msg.type === "chord/index") {
-      state.currentChordIndex = Number(msg.value || -1);
-      renderChordNext();
-    }
-  });
-}
-
-// === SETLIST ===
-function renderSetlist() {
-  setlistContainer.innerHTML = "";
-  state.setlist.forEach(s => {
-    const card = document.createElement("div");
-    card.className = "song" + (s.id === state.currentSongId ? " active" : "");
-    const title = document.createElement("div");
-    title.className = "title";
-    title.textContent = s.title;
-    const id = document.createElement("small");
-    id.textContent = s.id;
-    card.appendChild(title); card.appendChild(id);
-    card.addEventListener("click", () => {
-      state.ws?.send(JSON.stringify({ type: "song/select", id: s.id }));
-    });
-    setlistContainer.appendChild(card);
-  });
-}
-
-mockSetlistBtn?.addEventListener("click", () => {
-  const mock = [
-    { id: "song-1", title: "Intro", lyrics: ["Benvenuti","..."], chordTimeline: ["Em","D","G","C"] },
-    { id: "song-2", title: "Fiume", lyrics: ["Scorri piano","tra...","..." ], chordTimeline: ["C","G","Am","F","C","G","Am","F"] },
-    { id: "song-3", title: "Notte", lyrics: ["Sotto il cielo","blu scuro","..." ], chordTimeline: ["Dm","Bb","F","C"] }
-  ];
-  state.ws?.send(JSON.stringify({ type: "setlist/replace", setlist: mock }));
-});
-
-clearSetlistBtn?.addEventListener("click", () => {
-  state.ws?.send(JSON.stringify({ type: "setlist/replace", setlist: [] }));
-});
-
-// === EDITOR bindings ===
-applyLyricsBtn.addEventListener("click", () => {
-  const text = lyricsInput.value || "";
-  const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-  state.ws?.send(JSON.stringify({ type: "song/update-lyrics", lyrics: lines }));
-});
-applyTimelineBtn.addEventListener("click", () => {
-  const t = chordTimelineInput.value || "";
-  const arr = t.split(/\s+/).map(s=>s.trim()).filter(Boolean);
-  state.ws?.send(JSON.stringify({ type: "song/update-chords", timeline: arr }));
-});
-
-// === Transpose (solo CHORDS) ===
-transpose.value = String(state.transpose);
-transposeValue.textContent = String(state.transpose);
-transpose.addEventListener("input", () => {
-  state.transpose = Number(transpose.value || 0);
-  localStorage.setItem("transpose", String(state.transpose));
-  transposeValue.textContent = String(state.transpose);
-  renderChordNow();
-  renderChordNext();
-});
-
-// === Prefs UI init/bind ===
-const savePrefsBtn = document.getElementById("savePrefs");
-const resetPrefsBtn = document.getElementById("resetPrefs");
-
-function initPrefsControls() {
-  const setSwatches=()=>{
-    lyBgSwatch.style.backgroundColor = expandTo6(state.prefs.lyricsBg);
-    lyFgSwatch.style.backgroundColor = expandTo6(state.prefs.lyricsFg);
-    lyHiSwatch.style.backgroundColor = expandTo6(state.prefs.lyricsHi);
-    chBgSwatch.style.backgroundColor = expandTo6(state.prefs.chordsBg);
-    chFgSwatch.style.backgroundColor = expandTo6(state.prefs.chordsFg);
-    chHiSwatch.style.backgroundColor = expandTo6(state.prefs.chordsHi);
+  const state = {
+    ws: null,
+    page: localStorage.getItem('page') || 'performance', // performance | setlist | editor
+    mode: localStorage.getItem('mode') || 'lyrics',      // lyrics | chords | split
+    activeLane: localStorage.getItem('activeLane') || 'lyrics', // lyrics | chords
+    server: null, // ultima copia di stato dal server
   };
+const CSS_KEYS = [
+  'lyrics-bg','lyrics-fg','lyrics-hi','lyrics-font','lyrics-dim','lyrics-alpha',
+  'chords-bg','chords-fg','chords-hi','chords-now-font','chords-next-font','chords-alpha'
+];
 
-  const p = state.prefs;
-  // set iniziali
-  lyBg.value = expandTo6(p.lyricsBg); lyFg.value = expandTo6(p.lyricsFg); lyHi.value = expandTo6(p.lyricsHi);
-  lyBgHex.value = p.lyricsBg; lyFgHex.value = p.lyricsFg; lyHiHex.value = p.lyricsHi; setSwatches();
+function loadCSSVars() {
+  const root = document.documentElement;
+  const saved = JSON.parse(localStorage.getItem('lyrix-css') || '{}');
+  CSS_KEYS.forEach(k => {
+    if (saved[k] != null) {
+      const v = k.includes('font') || k.includes('dim') || k.includes('alpha') ? saved[k] : saved[k];
+      root.style.setProperty(`--${k}`, String(v).startsWith('#') ? v : v);
+    }
+  });
+  // Sync UI controls se presenti
+  lyBg && (lyBg.value = getVar('--lyrics-bg')); lyBgPick && (lyBgPick.value = toColor(getVar('--lyrics-bg')));
+  lyFg && (lyFg.value = getVar('--lyrics-fg')); lyFgPick && (lyFgPick.value = toColor(getVar('--lyrics-fg')));
+  lyHi && (lyHi.value = getVar('--lyrics-hi')); lyHiPick && (lyHiPick.value = toColor(getVar('--lyrics-hi')));
+  lyFont && (lyFont.value = fromPxVar('--lyrics-font', 10));
+  lyDim && (lyDim.value = fromIntVar('--lyrics-dim', 40));
+  lyAlpha && (lyAlpha.value = fromIntVar('--lyrics-alpha', 16));
 
-  lyAlpha.value = p.lyricsAlpha; lyFont.value = p.lyricsFont; lyDim.value = p.lyricsDim;
+  chBg && (chBg.value = getVar('--chords-bg')); chBgPick && (chBgPick.value = toColor(getVar('--chords-bg')));
+  chFg && (chFg.value = getVar('--chords-fg')); chFgPick && (chFgPick.value = toColor(getVar('--chords-fg')));
+  chHi && (chHi.value = getVar('--chords-hi')); chHiPick && (chHiPick.value = toColor(getVar('--chords-hi')));
+  chNow && (chNow.value = fromPxVar('--chords-now-font', 64));
+  chNext && (chNext.value = fromPxVar('--chords-next-font', 22));
+  chAlpha && (chAlpha.value = fromIntVar('--chords-alpha', 12));
+}
 
-  chBg.value = expandTo6(p.chordsBg); chFg.value = expandTo6(p.chordsFg); chHi.value = expandTo6(p.chordsHi);
-  chBgHex.value = p.chordsBg; chFgHex.value = p.chordsFg; chHiHex.value = p.chordsHi; setSwatches();
+function saveCSSVars() {
+  const root = document.documentElement;
+  const saved = {};
+  CSS_KEYS.forEach(k => saved[k] = getVar(`--${k}`));
+  localStorage.setItem('lyrix-css', JSON.stringify(saved));
+}
 
-  chAlpha.value = p.chordsAlpha; chNowFont.value = p.chordsNowFont; chNextFont.value = p.chordsNextFont;
+function getVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function setVar(name, value){ document.documentElement.style.setProperty(name, value); }
+function toColor(v){ return /^#/.test(v) ? v : '#000000'; }
+function fromPxVar(name, fallback){ const v = parseInt(getVar(name), 10); return Number.isFinite(v) ? v : fallback; }
+function fromIntVar(name, fallback){ const v = parseInt(getVar(name), 10); return Number.isFinite(v) ? v : fallback; }
 
-  const bindHexPair = (hexInput, colorInput, key, swatch) => {
-    hexInput.addEventListener("input", () => {
-      const raw = hexInput.value.trim();
-      if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(raw)) {
-        const norm = raw.toUpperCase();
-        state.prefs[key] = norm;
-        colorInput.value = expandTo6(norm);
-        if (swatch) swatch.style.backgroundColor = expandTo6(norm);
-        applyPrefs();
-      } else if (raw.toLowerCase().startsWith("rgb")) {
-        const norm = normalizeHex(raw);
-        state.prefs[key] = norm;
-        colorInput.value = expandTo6(norm);
-        if (swatch) swatch.style.backgroundColor = expandTo6(norm);
-        applyPrefs();
+  // Header elements
+  const wsDot       = $('wsDot');
+  const pageSelect  = $('pageSelect');
+btnModeLyrics?.addEventListener('click', () => { setPage('performance'); setMode('lyrics'); });
+btnModeChords?.addEventListener('click', () => { setPage('performance'); setMode('chords'); });
+btnModeSplit ?.addEventListener('click', () => { setPage('performance'); setMode('split');  });
+  const btnFull     = $('btnFull');
+  const laneBadge   = $('laneBadge');
+  const songTitle   = $('songTitle');
+
+  // Pages
+  const pagePerformance = $('page-performance');
+  const pageSetlist     = $('page-setlist');
+  const pageEditor      = $('page-editor');
+
+  // Performance panes
+  const perfViewer   = $('perf-viewer');
+  const paneLyrics   = $('perf-lyrics');
+  const paneChords   = $('perf-chords');
+
+  // Lyrics controls + list
+  const lyrPrevBtn   = $('lyrPrev');
+  const lyrNextBtn   = $('lyrNext');
+  const lyricsList   = $('lyricsList');
+
+  // Chords controls + widgets
+  const choPrevBtn   = $('choPrev');
+  const choNextBtn   = $('choNext');
+  const chordCurrent = $('chordCurrent');
+  const chordNext4   = $('chordNext4');
+  const chordsList   = $('chordsList');
+
+  // Setlist controls + container
+  const setlistPrev  = $('setlistPrev');
+  const setlistNext  = $('setlistNext');
+  const setlistPlay  = $('setlistPlay');
+  const setlistStop  = $('setlistStop');
+  const setlistContainer = $('setlistContainer');
+
+  // Editor
+  const editorLyrics = $('editorLyrics');
+  const editorChords = $('editorChords');
+  const editorSaveLyrics = $('editorSaveLyrics');
+  const editorSaveChords = $('editorSaveChords');
+
+  // Editor – Display settings
+  const lyBg = $('ly-bg'), lyBgPick = $('ly-bg-pick');
+  const lyFg = $('ly-fg'), lyFgPick = $('ly-fg-pick');
+  const lyHi = $('ly-hi'), lyHiPick = $('ly-hi-pick');
+  const lyFont = $('ly-font'), lyDim = $('ly-dim'), lyAlpha = $('ly-alpha');
+
+  const chBg = $('ch-bg'), chBgPick = $('ch-bg-pick');
+  const chFg = $('ch-fg'), chFgPick = $('ch-fg-pick');
+  const chHi = $('ch-hi'), chHiPick = $('ch-hi-pick');
+  const chNow = $('ch-now'), chNext = $('ch-next'), chAlpha = $('ch-alpha');
+
+  const stageEnter = $('stageEnter'), stageExit = $('stageExit');
+
+
+  // ---------------------------
+  // Helpers
+  // ---------------------------
+  function send(type, extra = {}) {
+    try { state.ws?.send(JSON.stringify({ type, ...extra })); } catch {}
+  }
+
+  function setPage(p) {
+    state.page = p;
+    localStorage.setItem('page', p);
+    document.body.dataset.page = p;
+
+    pagePerformance.classList.toggle('active', p === 'performance');
+    pageSetlist.classList.toggle('active', p === 'setlist');
+    pageEditor.classList.toggle('active', p === 'editor');
+
+    // Aggiorna select se serve
+    if (pageSelect && pageSelect.value !== p) pageSelect.value = p;
+  }
+
+  function setMode(m) {
+    state.mode = (m === 'chords' || m === 'split') ? m : 'lyrics';
+    localStorage.setItem('mode', state.mode);
+
+    document.body.classList.remove('mode-lyrics', 'mode-chords', 'mode-split');
+    document.body.classList.add(`mode-${state.mode}`);
+  }
+
+  function setActiveLane(lane) {
+    state.activeLane = (lane === 'chords') ? 'chords' : 'lyrics';
+    localStorage.setItem('activeLane', state.activeLane);
+    document.body.dataset.activeLane = state.activeLane;
+    if (laneBadge) laneBadge.textContent = `Focus: ${state.activeLane[0].toUpperCase()}${state.activeLane.slice(1)}`;
+    send('ui/setActiveLane', { lane: state.activeLane });
+  }
+
+  async function toggleFullscreen() {
+    if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+    else await document.exitFullscreen();
+  }
+
+  // ---------------------------
+  // Render
+  // ---------------------------
+  function renderSongTitle() {
+    if (!songTitle) return;
+    const s = state.server?.currentSong;
+    songTitle.textContent = s?.title || '—';
+  }
+
+  function renderLyrics() {
+    const song = state.server?.currentSong;
+    const idx = state.server?.currentLyricIndex ?? -1;
+    lyricsList.innerHTML = '';
+
+    const lines = Array.isArray(song?.lyrics) ? song.lyrics : [];
+    lines.forEach((line, i) => {
+      const div = document.createElement('div');
+      div.className = 'line' + (i === idx ? ' current' : '');
+      div.textContent = typeof line === 'string' ? line : (line?.text ?? '');
+      lyricsList.appendChild(div);
+    });
+
+    // autocentro la riga corrente
+    if (idx >= 0) {
+      const cur = lyricsList.children[idx];
+      if (cur) {
+        cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    }
+  }
+
+function renderChords() {
+  const song = state.server?.currentSong;
+  const idx = state.server?.currentChordIndex ?? -1;
+  const chords = Array.isArray(song?.chords) ? song.chords : [];
+
+  // Corrente
+  const now = chords[idx];
+  chordCurrent.textContent = now ? (now.chord ?? String(now)) : '—';
+
+  // Next 4 – griglia originale
+  chordNext4.innerHTML = '';
+  chordNext4.classList.add('next-grid');
+  for (let k = 1; k <= 4; k++) {
+    const next = chords[idx + k];
+    if (!next) break;
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.textContent = next.chord ?? String(next);
+    chordNext4.appendChild(cell);
+  }
+
+  // Lista completa (opzionale)
+  chordsList.innerHTML = '';
+  chords.forEach((c, i) => {
+    const div = document.createElement('div');
+    div.className = 'chord' + (i === idx ? ' active' : '');
+    div.textContent = c.chord ?? String(c);
+    chordsList.appendChild(div);
+  });
+
+  // autocentro il corrente in lista completa
+  if (idx >= 0) {
+    const cur = chordsList.children[idx];
+    if (cur) cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+}
+  function renderSetlist() {
+    const list = Array.isArray(state.server?.setlist) ? state.server.setlist : [];
+    const currentId = state.server?.currentSongId;
+    setlistContainer.innerHTML = '';
+
+    if (list.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'setlist-empty';
+      empty.textContent = 'Nessun brano in setlist.';
+      setlistContainer.appendChild(empty);
+      return;
+    }
+
+    list.forEach((song, i) => {
+      const card = document.createElement('div');
+      card.className = 'setlist-item' + (song.id === currentId ? ' active' : '');
+      card.innerHTML = `
+        <div class="idx">${i + 1}</div>
+        <div>
+          <div class="title">${song.title ?? 'Untitled'}</div>
+          <div class="meta">PC: ${song.programChange ?? (i + 1)}</div>
+        </div>
+      `;
+card.addEventListener('click', () => {
+  send('song/selectByIndex', { index: i });
+});
+      setlistContainer.appendChild(card);
+    });
+  }
+
+  function renderAll() {
+    renderSongTitle();
+    renderLyrics();
+    renderChords();
+    renderSetlist();
+  }
+
+  // ---------------------------
+  // WebSocket
+  // ---------------------------
+  function connectWS() {
+    const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+    const ws = new WebSocket(url);
+    state.ws = ws;
+
+    ws.addEventListener('open', () => {
+      wsDot?.classList.add('on');
+      // sync lane al server
+      send('ui/setActiveLane', { lane: state.activeLane });
+    });
+    ws.addEventListener('close', () => {
+      wsDot?.classList.remove('on');
+      // semplice retry
+      setTimeout(connectWS, 1500);
+    });
+    ws.addEventListener('message', (ev) => {
+      let msg = null;
+      try { msg = JSON.parse(ev.data); } catch {}
+      if (!msg) return;
+
+      if (msg.type === 'state') {
+        state.server = msg.state;
+        // Se il server ha una lane/mode diversa, sincronizza UI (non forzante)
+        if (msg.state?.settings?.activeLane && msg.state.settings.activeLane !== state.activeLane) {
+          setActiveLane(msg.state.settings.activeLane);
+        }
+        renderAll();
       }
     });
-    colorInput.addEventListener("input", () => {
-      const v = colorInput.value.toUpperCase();
-      const compact = compressTo3Or6(v);
-      state.prefs[key] = compact;
-      hexInput.value = compact;
-      if (swatch) swatch.style.backgroundColor = expandTo6(compact);
-      applyPrefs();
-    });
-  };
+  }
 
-  const bind = (el, key, transform=(v)=>v) => {
-    el.addEventListener("input", () => {
-      state.prefs[key] = transform(el.value);
-      applyPrefs();
-    });
-  };
-  bind(lyAlpha, "lyricsAlpha", Number);
-  bind(lyFont, "lyricsFont", Number);
-  bind(lyDim, "lyricsDim", Number);
-  bind(chAlpha, "chordsAlpha", Number);
-  bind(chNowFont, "chordsNowFont", Number);
-  bind(chNextFont, "chordsNextFont", Number);
 
-  bindHexPair(lyBgHex, lyBg, "lyricsBg", lyBgSwatch);
-  bindHexPair(lyFgHex, lyFg, "lyricsFg", lyFgSwatch);
-  bindHexPair(lyHiHex, lyHi, "lyricsHi", lyHiSwatch);
-  bindHexPair(chBgHex, chBg, "chordsBg", chBgSwatch);
-  bindHexPair(chFgHex, chFg, "chordsFg", chFgSwatch);
-  bindHexPair(chHiHex, chHi, "chordsHi", chHiSwatch);
 
-  savePrefsBtn.addEventListener("click", () => {
-    Object.entries(state.prefs).forEach(([k,v]) => localStorage.setItem(k, String(v)));
-    alert("Preferenze salvate su questo dispositivo");
+
+  // ---------------------------
+  // Bindings
+  // ---------------------------
+  // Page routing
+  if (pageSelect) {
+    pageSelect.value = state.page;
+    pageSelect.addEventListener('change', () => setPage(pageSelect.value));
+  }
+  setPage(state.page);
+
+  // Modes
+  setMode(state.mode);
+  btnModeLyrics?.addEventListener('click', () => setMode('lyrics'));
+  btnModeChords?.addEventListener('click', () => setMode('chords'));
+  btnModeSplit ?.addEventListener('click', () => setMode('split'));
+
+  // Active lane switches
+  setActiveLane(state.activeLane);
+  paneLyrics?.addEventListener('click', () => setActiveLane('lyrics'));
+  paneChords?.addEventListener('click', () => setActiveLane('chords'));
+
+  // Fullscreen
+// Fullscreen “da palco” uguale a Ctrl+F
+btnFull?.addEventListener('click', () => {
+  if (!document.body.classList.contains('hard-fullscreen')) {
+    document.body.classList.add('hard-fullscreen');
+    document.documentElement.requestFullscreen?.();
+  } else {
+    document.body.classList.remove('hard-fullscreen');
+    document.exitFullscreen?.();
+  }
+});
+
+  // Performance pane buttons
+  lyrPrevBtn?.addEventListener('click', () => send('lyrics/prev'));
+  lyrNextBtn?.addEventListener('click', () => send('lyrics/next'));
+  choPrevBtn?.addEventListener('click', () => send('chords/prev'));
+  choNextBtn?.addEventListener('click', () => send('chords/next'));
+
+  // Setlist page controls (solo qui Play/Stop/Prev/Next song)
+  setlistPrev?.addEventListener('click', () => send('transport/prev'));
+  setlistNext?.addEventListener('click', () => send('transport/next'));
+  setlistPlay?.addEventListener('click', () => send('transport/play'));
+  setlistStop?.addEventListener('click', () => send('transport/stop'));
+
+  // Editor save (placeholder: invia allo stato corrente; integrare con backend persistenza quando vuoi)
+editorSaveLyrics?.addEventListener('click', () => {
+  const lyricsText = editorLyrics?.value ?? '';
+  send('editor/apply', { lyricsText });
+});
+
+editorSaveChords?.addEventListener('click', () => {
+  const chordsText = editorChords?.value ?? '';
+  send('editor/apply', { chordsText });
+});
+
+  // Keyboard shortcuts
+  window.addEventListener('keydown', (e) => {
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+    // Modalità
+    if (e.key === '1') setMode('lyrics');
+    if (e.key === '2') setMode('chords');
+    if (e.key === '3') setMode('split');
+
+    // Fullscreen
+    if (e.key === 'f' || e.key === 'F') { toggleFullscreen(); }
+
+    // Navigation con frecce: sulla lane attiva
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      if (state.activeLane === 'lyrics') send('lyrics/prev');
+      else send('chords/prev');
+    }
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      if (state.activeLane === 'lyrics') send('lyrics/next');
+      else send('chords/next');
+    }
+
+    // Space: SOLO nella pagina setlist → Play (Shift+Space → Stop)
+    if (e.code === 'Space') {
+      if (state.page === 'setlist') {
+        e.preventDefault();
+        if (e.shiftKey) send('transport/stop');
+        else send('transport/play');
+      }
+    }
   });
-  resetPrefsBtn.addEventListener("click", () => {
-    localStorage.removeItem("lyricsBg"); localStorage.removeItem("lyricsFg"); localStorage.removeItem("lyricsHi");
-    localStorage.removeItem("lyricsAlpha"); localStorage.removeItem("lyricsFont"); localStorage.removeItem("lyricsDim");
-    localStorage.removeItem("chordsBg"); localStorage.removeItem("chordsFg"); localStorage.removeItem("chordsHi");
-    localStorage.removeItem("chordsAlpha"); localStorage.removeItem("chordsNowFont"); localStorage.removeItem("chordsNextFont");
-    state.prefs = {
-      lyricsBg:"#111111", lyricsFg:"#f2f2f2", lyricsHi:"#277eff", lyricsAlpha:16, lyricsFont:64, lyricsDim:40,
-      chordsBg:"#0b0b0e", chordsFg:"#f2f2f2", chordsHi:"#277eff", chordsAlpha:12, chordsNowFont:64, chordsNextFont:22,
-    };
-    initPrefsControls();
-    applyPrefs();
-  });
+
+  function bindColor(textInput, pickerInput, varName){
+  if (!textInput || !pickerInput) return;
+  const sync = (val) => { textInput.value = val; pickerInput.value = val; setVar(varName, val); saveCSSVars(); };
+  textInput.addEventListener('change', () => sync(textInput.value));
+  pickerInput.addEventListener('input', () => sync(pickerInput.value));
 }
 
-// === Boot ===
-applyPrefs();
-initPrefsControls();
-connectWS();
+bindColor(lyBg, lyBgPick, '--lyrics-bg');
+bindColor(lyFg, lyFgPick, '--lyrics-fg');
+bindColor(lyHi, lyHiPick, '--lyrics-hi');
+bindColor(chBg, chBgPick, '--chords-bg');
+bindColor(chFg, chFgPick, '--chords-fg');
+bindColor(chHi, chHiPick, '--chords-hi');
 
-// Demo iniziale (se il server non ha ancora stato)
-if (!state.lyrics?.length) state.lyrics = ["Prima riga","Seconda riga","Terza riga","Quarta riga"];
-renderLyrics(true);
-renderChordNow();
-renderChordNext();
+lyFont?.addEventListener('input', () => { setVar('--lyrics-font', `${lyFont.value}`); saveCSSVars(); });
+lyDim ?.addEventListener('input', () => { setVar('--lyrics-dim', `${lyDim.value}`); saveCSSVars(); });
+lyAlpha?.addEventListener('input', () => { setVar('--lyrics-alpha', `${lyAlpha.value}`); saveCSSVars(); });
+
+chNow ?.addEventListener('input', () => { setVar('--chords-now-font', `${chNow.value}`); saveCSSVars(); });
+chNext?.addEventListener('input', () => { setVar('--chords-next-font', `${chNext.value}`); saveCSSVars(); });
+chAlpha?.addEventListener('input', () => { setVar('--chords-alpha', `${chAlpha.value}`); saveCSSVars(); });
+
+// Pulsanti Stage Fullscreen (solo stage, nessun header)
+stageEnter?.addEventListener('click', () => {
+  document.body.classList.add('hard-fullscreen');
+  document.documentElement.requestFullscreen?.();
+});
+stageExit?.addEventListener('click', () => {
+  document.body.classList.remove('hard-fullscreen');
+  document.exitFullscreen?.();
+});
+
+window.addEventListener('keydown', (e) => {
+  // ... (resto già presente)
+  if ((e.key === 'f' || e.key === 'F') && e.ctrlKey) {
+    e.preventDefault();
+    if (!document.body.classList.contains('hard-fullscreen')) {
+      document.body.classList.add('hard-fullscreen');
+      document.documentElement.requestFullscreen?.();
+    } else {
+      document.body.classList.remove('hard-fullscreen');
+      document.exitFullscreen?.();
+    }
+  }
+});
+
+
+  // ---------------------------
+  // Boot
+  // ---------------------------
+  connectWS();
+  loadCSSVars();
+
+
+  // Se vuoi caricare una sessione demo al primo avvio, inviala qui:
+  // send('state/loadSession', { session: { id:'demo', title:'Demo', songs:[ ... ] } });
+})();

@@ -2,163 +2,244 @@
 <html lang="it">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1, viewport-fit=cover" />
-  <title>Lyrix Bridge • Live</title>
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
+  <title>Lyrix Bridge</title>
   <link rel="stylesheet" href="./styles.css" />
+  <style>
+    :root{
+      --bg:#111; --fg:#f2f2f2; --muted:#bdbdbd; --border:#2a2a2a; --accent:#715ee8;
+    }
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+
+    /* Header */
+    header{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)}
+    header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.3px}
+    .status-dot{width:10px;height:10px;border-radius:50%;background:#a33;box-shadow:0 0 0 2px rgba(0,0,0,.2)}
+    .status-dot.on{background:#2dbf6f}
+    .lane-badge{margin-left:8px;padding:2px 8px;border:1px solid var(--border);border-radius:999px;font-size:.8rem;opacity:.9}
+    .header-btn{background:#222;border:1px solid var(--border);padding:6px 10px;border-radius:8px;color:var(--fg);cursor:pointer}
+    .header-btn:hover{filter:brightness(1.1)}
+    .header-select{background:#181818;color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:6px 10px}
+
+    /* Pages */
+    main{height:calc(100vh - 64px)}
+    .page{display:none;height:100%}
+    .page.active{display:block}
+
+    /* Performance viewer */
+    .viewer{height:100%;overflow:hidden}
+    .pane{height:100%;overflow:auto;padding:24px}
+    .pane-controls{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+    .pane-controls button{background:#222;border:1px solid var(--border);padding:6px 10px;border-radius:8px;color:var(--fg);cursor:pointer}
+    .pane-controls button:hover{filter:brightness(1.1)}
+    .title{opacity:.8;margin:0 0 12px 0;font-weight:600;letter-spacing:.4px}
+    .line{font-size:2.2rem;line-height:1.4;margin:12px 0;text-align:center}
+    .line.active{color:var(--accent);font-weight:800}
+    .chord{font-size:3rem;line-height:1.1;margin:10px 0;text-align:center}
+    .chord.active{color:var(--accent);font-weight:800}
+    .next4{opacity:.85;margin-top:16px;font-size:1rem;text-align:center}
+    .next4 span{display:inline-block;margin:0 6px;padding:4px 8px;border:1px solid var(--border);border-radius:8px}
+
+    /* Modes */
+    body.mode-lyrics #perf-lyrics{display:block}
+    body.mode-lyrics #perf-chords{display:none}
+    body.mode-chords #perf-lyrics{display:none}
+    body.mode-chords #perf-chords{display:block}
+    body.mode-split #perf-viewer{display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid var(--border)}
+    body.mode-split #perf-lyrics, body.mode-split #perf-chords{display:block}
+  </style>
 </head>
-<body>
+<body class="mode-lyrics" data-active-lane="lyrics" data-page="performance">
   <header>
+    <div class="status-dot" id="wsDot" title="WebSocket status"></div>
     <h1>Lyrix Bridge</h1>
-    <div id="status">
-      <span class="dot red" id="ws-dot"></span>
-      <span id="ws-text">WS: disconnected</span>
-    </div>
+
+    <!-- Page switcher -->
+    <select id="pageSelect" class="header-select" title="Seleziona pagina">
+      <option value="performance" selected>Performance</option>
+      <option value="setlist">Setlist</option>
+      <option value="editor">Editor</option>
+    </select>
+
+    <!-- Mode & lane -->
+    <button id="btnModeLyrics" class="header-btn" title="Solo Lyrics (1)">Lyrics</button>
+    <button id="btnModeChords" class="header-btn" title="Solo Chords (2)">Chords</button>
+    <button id="btnModeSplit" class="header-btn" title="Split (3)">Split</button>
+    <div class="lane-badge" id="laneBadge">Focus: Lyrics</div>
+
+    <!-- Fullscreen -->
+    <button id="btnFull" class="header-btn" title="Fullscreen (F)" style="margin-left:auto">⛶ Full</button>
+
+    <!-- Song title -->
+    <div style="opacity:.7;font-size:.9rem" id="songTitle">—</div>
   </header>
 
-  <nav>
-    <button class="tab active" data-tab="lyrics">LYRICS</button>
-    <button class="tab" data-tab="chords">CHORDS</button>
-    <button class="tab" data-tab="setlist">SETLIST</button>
-    <button class="tab" data-tab="editor">EDITOR</button>
-    <div class="spacer"></div>
-  </nav>
-
   <main>
-    <!-- LYRICS -->
-    <section id="lyrics" class="panel show">
-      <div class="lyrics-stage" id="lyricsStage">
-        <div id="lyricsList" class="lyrics-list"></div>
-      </div>
-    </section>
-
-    <!-- CHORDS -->
-    <section id="chords" class="panel">
-      <div class="chords-toolbar">
-        <label>Transpose
-          <input type="range" id="transpose" min="-12" max="12" step="1" value="0" />
-          <span id="transposeValue">0</span>
-        </label>
-      </div>
-
-      <div class="chords-stage">
-        <div class="chords-now">
-          <div class="label">Now</div>
-          <div id="chordNow" class="chord">—</div>
+    <!-- PAGE: PERFORMANCE (Lyrics/Chords/Split) -->
+    <section id="page-performance" class="page active">
+      <div id="perf-viewer" class="viewer">
+        <!-- Lyrics pane -->
+        <div id="perf-lyrics" class="pane" tabindex="0" aria-label="Lyrics pane">
+          <h2 class="title">Lyrics</h2>
+          <div class="pane-controls">
+            <button id="lyrPrev">⟵ Prev line</button>
+            <button id="lyrNext">Next line ⟶</button>
+            <span style="opacity:.7;font-size:.9rem">Scorciatoie: ArrowLeft/ArrowRight (se focus Lyrics)</span>
+          </div>
+          <div id="lyricsList">
+            <!-- righe testo render da app.js -->
+          </div>
         </div>
-        <div class="chords-next">
-          <div class="label">Next 4</div>
-          <div id="chordNext" class="next-grid"></div>
+
+        <!-- Chords pane -->
+        <div id="perf-chords" class="pane" tabindex="0" aria-label="Chords pane">
+          <h2 class="title">Chords</h2>
+          <div class="pane-controls">
+            <button id="choPrev">⟵ Prev chord</button>
+            <button id="choNext">Next chord ⟶</button>
+            <span style="opacity:.7;font-size:.9rem">Scorciatoie: ArrowLeft/ArrowRight (se focus Chords)</span>
+          </div>
+          <!-- Blocco “now” -->
+          <div class="chords-now">
+            <div class="label">Now</div>
+            <div id="chordCurrent" class="chord">—</div>
+          </div>
+
+          <!-- Blocco “next” in griglia stile originale -->
+          <div class="chords-next">
+            <div class="label">Next 4</div>
+            <div id="chordNext4" class="next-grid">
+              <!-- celle generate da app.js -->
+            </div>
+          </div>
+
+<!-- Lista completa (facoltativa) -->
+<div id="chordsList" style="margin-top:24px"></div>
+
+            <!-- lista completa accordi (opzionale) -->
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- SETLIST -->
-    <section id="setlist" class="panel">
-      <div class="setlist-toolbar">
-        <button id="mockSetlist">Add Setlist</button>
-        <button id="clearSetlist">Delete setlist</button>
+    <!-- PAGE: SETLIST (Play/Stop + prev/next song) -->
+    <section id="page-setlist" class="page">
+      <div style="padding:16px">
+        <h2 class="title">Setlist</h2>
+        <div class="pane-controls" style="margin-bottom:16px">
+          <button id="setlistPrev">⟵ Prev song</button>
+          <button id="setlistPlay">▶︎ Play</button>
+          <button id="setlistStop">■ Stop</button>
+          <button id="setlistNext">Next song ⟶</button>
+          <span style="opacity:.7;font-size:.9rem">Questi comandi agiscono solo qui.</span>
+        </div>
+        <div id="setlistContainer">
+          <!-- lista brani con selezione (render da app.js) -->
+        </div>
       </div>
-      <div id="setlistContainer" class="setlist"></div>
     </section>
 
-    <!-- EDITOR -->
-    <section id="editor" class="panel">
-      <div class="grid-two">
+    <!-- PAGE: EDITOR (semplice placeholder; manteniamo la struttura) -->
+    <section id="page-editor" class="page">
+      <div style="padding:16px;display:grid;gap:16px;grid-template-columns:1fr 1fr">
         <div>
-          <h3>Lyrics (one line at a time)</h3>
-          <textarea id="lyricsInput" rows="10" spellcheck="false"></textarea>
-          <button id="applyLyrics">Apply Lyrics</button>
+          <h2 class="title">Editor Lyrics</h2>
+          <textarea id="editorLyrics" rows="18" style="width:100%;background:#181818;color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:12px"></textarea>
+          <div class="pane-controls" style="margin-top:8px">
+            <button id="editorSaveLyrics">Salva Lyrics</button>
+          </div>
         </div>
         <div>
-          <h3>Timeline chords (space-separated)</h3>
-          <textarea id="chordTimelineInput" rows="10" placeholder="Es: Em D G C Em D G G" spellcheck="false"></textarea>
-          <button id="applyTimeline">Apply Timeline</button>
+          <h2 class="title">Editor Chords</h2>
+          <textarea id="editorChords" rows="18" style="width:100%;background:#181818;color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:12px"></textarea>
+          <div class="pane-controls" style="margin-top:8px">
+            <button id="editorSaveChords">Salva Chords</button>
+          </div>
+          
         </div>
       </div>
-<section class="edit-options">
-      <h3>LYRICS Options</h3>
-      <div class="grid-three">
-        <label>BG Color
-          <span class="color-field">
-            <span class="color-swatch" id="lyBgSwatch"></span>
-            <input type="text" id="lyBgHex" placeholder="#FFF" />
-            <input type="color" id="lyBg" />
-          </span>
-        </label>
-        <label>Text Color
-          <span class="color-field">
-            <span class="color-swatch" id="lyFgSwatch"></span>
-            <input type="text" id="lyFgHex" placeholder="#FFF" />
-            <input type="color" id="lyFg" />
-          </span>
-        </label>
-        <label>Highlight Color
-          <span class="color-field">
-            <span class="color-swatch" id="lyHiSwatch"></span>
-            <input type="text" id="lyHiHex" placeholder="#FFF" />
-            <input type="color" id="lyHi" />
-          </span>
-        </label>
 
-        <label>Highlight Opacity (%)
-          <input type="range" id="lyAlpha" min="0" max="100" step="1" />
-        </label>
-        <label>Font Size (px)
-          <input type="range" id="lyFont" min="24" max="120" step="2" />
-        </label>
-        <label>Non current line (%)
-          <input type="range" id="lyDim" min="0" max="100" step="1" />
-        </label>
-      </div>
-    </section>
-<section class="edit-options">
-      <h3>CHORDS Options</h3>
-      <div class="grid-three">
-        <label>BG Color
-          <span class="color-field">
-            <span class="color-swatch" id="chBgSwatch"></span>
-            <input type="text" id="chBgHex" placeholder="#FFF" />
-            <input type="color" id="chBg" />
-          </span>
-        </label>
-        <label>Text Color
-          <span class="color-field">
-            <span class="color-swatch" id="chFgSwatch"></span>
-            <input type="text" id="chFgHex" placeholder="#FFF" />
-            <input type="color" id="chFg" />
-          </span>
-        </label>
-        <label>Highlight Color
-          <span class="color-field">
-            <span class="color-swatch" id="chHiSwatch"></span>
-            <input type="text" id="chHiHex" placeholder="#FFF" />
-            <input type="color" id="chHi" />
-          </span>
-        </label>
+      <hr class="edit-options"/>
 
-        <label>Highlight Opacity (%)
-          <input type="range" id="chAlpha" min="0" max="100" step="1" />
-        </label>
-        <label>Size (Now)
-          <input type="range" id="chNowFont" min="24" max="120" step="2" />
-        </label>
-        <label>Size (Next)
-          <input type="range" id="chNextFont" min="16" max="48" step="1" />
-        </label>
-      </div>
+<div class="grid-three" style="margin-top:12px">
+  <div>
+    <h3 class="title">Lyrics Display</h3>
+    <div class="color-field">
+      <label>BG</label>
+      <input id="ly-bg" type="text" value="#111111">
+      <input id="ly-bg-pick" type="color" value="#111111">
+    </div>
+    <div class="color-field" style="margin-top:8px">
+      <label>FG</label>
+      <input id="ly-fg" type="text" value="#f2f2f2">
+      <input id="ly-fg-pick" type="color" value="#f2f2f2">
+    </div>
+    <div class="color-field" style="margin-top:8px">
+      <label>HI</label>
+      <input id="ly-hi" type="text" value="#277eff">
+      <input id="ly-hi-pick" type="color" value="#277eff">
+    </div>
+    <div style="margin-top:8px">
+      <label>Font (px)</label>
+      <input id="ly-font" type="range" min="20" max="160" step="2">
+    </div>
+    <div style="margin-top:8px">
+      <label>Dim (%)</label>
+      <input id="ly-dim" type="range" min="0" max="90" step="1">
+    </div>
+    <div style="margin-top:8px">
+      <label>HI Alpha</label>
+      <input id="ly-alpha" type="range" min="0" max="40" step="1">
+    </div>
+  </div>
 
-      <div class="editor-actions">
-        <button id="savePrefs">Save Preferences (in this device)</button>
-        <button id="resetPrefs">Reset Preferences</button>
-      </div>
-      </section>
+  <div>
+    <h3 class="title">Chords Display</h3>
+    <div class="color-field">
+      <label>BG</label>
+      <input id="ch-bg" type="text" value="#0b0b0e">
+      <input id="ch-bg-pick" type="color" value="#0b0b0e">
+    </div>
+    <div class="color-field" style="margin-top:8px">
+      <label>FG</label>
+      <input id="ch-fg" type="text" value="#f2f2f2">
+      <input id="ch-fg-pick" type="color" value="#f2f2f2">
+    </div>
+    <div class="color-field" style="margin-top:8px">
+      <label>HI</label>
+      <input id="ch-hi" type="text" value="#277eff">
+      <input id="ch-hi-pick" type="color" value="#277eff">
+    </div>
+    <div style="margin-top:8px">
+      <label>Now Font (px)</label>
+      <input id="ch-now" type="range" min="24" max="120" step="2">
+    </div>
+    <div style="margin-top:8px">
+      <label>Next Font (px)</label>
+      <input id="ch-next" type="range" min="12" max="64" step="1">
+    </div>
+    <div style="margin-top:8px">
+      <label>HI Alpha</label>
+      <input id="ch-alpha" type="range" min="0" max="40" step="1">
+    </div>
+  </div>
+
+  <div>
+    <h3 class="title">Stage Fullscreen</h3>
+    <p style="opacity:.8">Nasconde header e riempie tutto lo schermo con il solo stage (Lyrics/Chords).</p>
+    <button id="stageEnter">Entra Stage Fullscreen</button>
+    <button id="stageExit" style="background:#444">Esci Stage Fullscreen</button>
+    <p style="opacity:.7;margin-top:8px">Shortcut: <b>F</b> per fullscreen nativo, <b>Ctrl+F</b> per “Stage Fullscreen”.</p>
+  </div>
+</div>
+
     </section>
   </main>
 
-  <footer>
-    <small>WS: <code>ws://host:5173/sync</code> • OSC in: <code>udp 9000</code></small>
-  </footer>
-
-  <script src="./app.js" type="module"></script>
+  <script src="./app.js"></script>
 </body>
 </html>

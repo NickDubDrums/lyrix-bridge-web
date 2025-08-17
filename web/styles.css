@@ -157,3 +157,91 @@ button{background:var(--highligths);color:var(--text);border:none;padding:8px 12
   border:1px solid var(--border); border-radius:6px; background:transparent; cursor:pointer;
 }
 .color-swatch{ width:5px; height:5px; border-radius:4px; border:1px solid #9aa0a6; box-shadow: 0 0 0 1px rgba(0,0,0,.15) inset; }
+
+/* =========================================================
+   AGGIUNTE MINIME per nuove pagine e controlli (Performance/Setlist/Editor)
+   ========================================================= */
+
+/* Indicatore WS compatibile col tuo schema (alternativa a .dot) */
+.status-dot{width:10px;height:10px;border-radius:50%;display:inline-block;background:var(--danger)}
+.status-dot.on{background:var(--ok)}
+
+/* Badge corsia attiva (Lyrics/Chords) in header */
+.lane-badge{
+  margin-left:8px; padding:2px 8px;
+  border:1px solid var(--border); border-radius:999px;
+  font-size:.85rem; color:var(--muted);
+}
+
+/* Routing pagine (performance / setlist / editor) */
+.page{display:none}
+.page.active{display:block}
+
+/* Viewer/pannelli performance */
+.viewer{height:100%; overflow:hidden}
+.pane{
+  height:100%; overflow:auto; padding:24px 16px;
+  border:1px solid var(--border); border-radius:12px;
+}
+
+/* Applica la tua palette ai due pane performance */
+#perf-lyrics{ background: var(--lyrics-bg); }
+#perf-chords{ background: var(--chords-bg); }
+
+/* Modalità: mostra/nascondi pane in base alla mode attiva */
+body.mode-lyrics #perf-lyrics{display:block}
+body.mode-lyrics #perf-chords{display:none}
+body.mode-chords #perf-lyrics{display:none}
+body.mode-chords #perf-chords{display:block}
+body.mode-split .viewer{
+  display:grid; grid-template-columns:1fr 1fr; gap:16px;
+}
+body.mode-split #perf-lyrics, body.mode-split #perf-chords{display:block}
+
+/* Split “verticale” in portrait: ACCORDI sopra, TESTO sotto */
+@media (orientation: portrait) {
+  body.mode-split #perf-viewer{
+    display:grid;
+    grid-template-columns: 1fr;      /* una colonna sola */
+    grid-template-rows: 1fr 1fr;     /* due righe */
+    gap: 16px;
+  }
+  /* Ordina i pane: Chords sopra, Lyrics sotto */
+  #perf-chords { order: 0; }
+  #perf-lyrics { order: 1; }
+}
+
+
+/* Chords corrente + prossimi 4 (compatibile con i tuoi stili) */
+#chordCurrent{ /* usa lo stile .chord */
+  font-size: calc(var(--chords-now-font) * 1px);
+  font-weight:700; letter-spacing:1px; text-align:center; color:var(--chords-fg);
+  margin-bottom:12px;
+}
+/* === Next 4 in griglia originale === */
+#chordNext4.next-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px }
+#chordNext4.next-grid .cell{
+  border:1px solid var(--border); border-radius:8px; padding:10px; text-align:center;
+  color:var(--chords-fg); font-weight:600;
+  background: color-mix(in srgb, var(--chords-hi) calc(var(--chords-alpha)*1%), var(--chords-bg));
+  font-size: calc(var(--chords-next-font) * 1px);
+}
+
+/* === Stage Fullscreen (niente header, solo stage) === */
+body.hard-fullscreen header,
+body.hard-fullscreen nav,
+body.hard-fullscreen footer { display:none !important; }
+body.hard-fullscreen main { padding:0 !important; }
+body.hard-fullscreen #page-performance { height:100vh; }
+body.hard-fullscreen #perf-viewer { height:100vh; }
+body.hard-fullscreen .pane { border-radius:0; border:none; height:100vh; }
+
+/* Micro-focus visivo pane attivo in modalità performance */
+body[data-active-lane="lyrics"] #perf-lyrics { outline: 2px solid color-mix(in srgb, var(--highligths) 45%, transparent); outline-offset:-2px }
+body[data-active-lane="chords"] #perf-chords { outline: 2px solid color-mix(in srgb, var(--highligths) 45%, transparent); outline-offset:-2px }
+
+/* Contenitore setlist usato dall'app per render (riusa le tue card .setlist .song) */
+#setlistContainer{ display:grid; gap:12px }
+
+/* Focus minimo sui pane (accessibilità live) */
+.pane:focus{ outline:2px solid color-mix(in srgb, var(--highligths) 65%, transparent); outline-offset:-2px }
