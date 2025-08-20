@@ -4,7 +4,7 @@
   --lyrics-fg: #f2f2f2;
   --lyrics-hi: #277eff;
   --lyrics-alpha: 16;
-  --lyrics-font: 10rem;
+  --lyrics-font: 5rem;
   --lyrics-dim: 40;
 
   /* CHORDS palette */
@@ -65,7 +65,7 @@ main{padding:16px}
   padding:24px 16px;
 }
 .lyrics-list{
-  max-width: 900px;
+  max-width: 80%;
   margin: 0 auto;
   display:flex; flex-direction:column; gap:8px;
 }
@@ -79,9 +79,11 @@ main{padding:16px}
 }
 .lyrics-list .line.current{
   opacity: 1;
-  transform: scale(1.04);
   background-color: color-mix(in srgb, var(--lyrics-hi) calc(var(--lyrics-alpha)*1%), transparent);
   border-radius: 8px;
+  font-size: calc(var(--lyrics-font) * 1.45px); 
+  outline: 2px solid color-mix(in srgb, var(--lyrics-hi) 30%, transparent);
+  outline-offset: 4px;
 }
 
 /* -------- CHORDS -------- */
@@ -102,6 +104,7 @@ main{padding:16px}
   background: color-mix(in srgb, var(--chords-hi) calc(var(--chords-alpha)*1%), var(--chords-bg));
   padding:12px;border-radius:8px;margin-bottom:16px;
 }
+
 .label{color:#9aa0a6;margin-bottom:6px}
 .chord{
   font-size: calc(var(--chords-now-font) * 1px);
@@ -193,22 +196,48 @@ body.mode-lyrics #perf-lyrics{display:block}
 body.mode-lyrics #perf-chords{display:none}
 body.mode-chords #perf-lyrics{display:none}
 body.mode-chords #perf-chords{display:block}
-body.mode-split .viewer{
-  display:grid; grid-template-columns:1fr 1fr; gap:16px;
+/* --- Split base (già ce l'hai, la ripeto per chiarezza) --- */
+body.mode-split #perf-viewer{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
 }
-body.mode-split #perf-lyrics, body.mode-split #perf-chords{display:block}
 
-/* Split “verticale” in portrait: ACCORDI sopra, TESTO sotto */
-@media (orientation: portrait) {
+/* Evita overflow: i pannelli possono “stringersi” */
+#perf-lyrics, #perf-chords { min-width: 0 }
+
+/* --- Portrait: metti in colonna (chords sopra, lyrics sotto) --- */
+/* Alcuni browser ignorano orientation su desktop: aggiungo fallback sotto. */
+@media (orientation: portrait){
   body.mode-split #perf-viewer{
-    display:grid;
-    grid-template-columns: 1fr;      /* una colonna sola */
-    grid-template-rows: 1fr 1fr;     /* due righe */
-    gap: 16px;
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 1fr 1fr;
+    grid-auto-flow: row;
   }
-  /* Ordina i pane: Chords sopra, Lyrics sotto */
-  #perf-chords { order: 0; }
-  #perf-lyrics { order: 1; }
+  #perf-chords{ order: 0 }
+  #perf-lyrics{ order: 1 }
+}
+
+/* Fallback 1: schermi “alti” (rapporto stretto) */
+@media (max-aspect-ratio: 3/4){
+  body.mode-split #perf-viewer{
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 1fr 1fr;
+    grid-auto-flow: row;
+  }
+  #perf-chords{ order: 0 }
+  #perf-lyrics{ order: 1 }
+}
+
+/* Fallback 2: telefoni stretti */
+@media (max-width: 640px){
+  body.mode-split #perf-viewer{
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 1fr 1fr;
+    grid-auto-flow: row;
+  }
+  #perf-chords{ order: 0 }
+  #perf-lyrics{ order: 1 }
 }
 
 
@@ -245,3 +274,145 @@ body[data-active-lane="chords"] #perf-chords { outline: 2px solid color-mix(in s
 
 /* Focus minimo sui pane (accessibilità live) */
 .pane:focus{ outline:2px solid color-mix(in srgb, var(--highligths) 65%, transparent); outline-offset:-2px }
+
+
+/* NAV fissa per pane (in basso a destra) */
+.floating-nav{
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display:flex;
+  gap:8px;
+  z-index: 5;
+}
+.floating-nav button{
+  background:#222; border:1px solid var(--border);
+  padding:10px 12px; border-radius:10px; color:#f2f2f2; cursor:pointer;
+}
+.floating-nav button:hover{ filter:brightness(1.1) }
+
+/* Lyrics: current più grosso e smooth */
+.lyrics-list .line.current{
+  font-size: calc(var(--lyrics-font) * 1.2px); /* +20% */
+  outline: 2px solid color-mix(in srgb, var(--lyrics-hi) 50%, transparent);
+  outline-offset: 4px;
+}
+
+
+/* Orizzontale*/
+.chord-timeline{
+  display:flex;
+  flex-direction: row; 
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 120px;
+  overflow: hidden;
+}
+
+.chord-item{
+  text-align:center;
+  font-weight:700;
+  transition: transform .15s ease, opacity .2s ease;
+  color: var(--chords-fg);
+}
+.chord-item.past   { opacity:.5;   transform: scale(.95); }
+.chord-item.future { opacity:.7;   transform: scale(.98); }
+.chord-item.current{ 
+  font-size: calc(var(--chords-now-font) * 1px);
+  color: var(--chords-fg);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--chords-hi) 35%, transparent);
+  background: color-mix(in srgb, var(--chords-hi) calc(var(--chords-alpha)*1%), var(--chords-bg));
+  padding: 8px 12px; border-radius: 10px; border:1px solid var(--border);
+}
+.chord-item.small { font-size: calc(var(--chords-now-font) * .7px); }
+
+/* Gradiente di “sbiadimento” progressivo (più lontano = più chiaro) */
+.chord-item.past.lv2, .chord-item.future.lv2 { opacity:.45; transform: scale(.9); }
+.chord-item.past.lv3, .chord-item.future.lv3 { opacity:.15; transform: scale(.85); }
+.chord-item.past.lv4, .chord-item.future.lv4 { opacity:.03; transform: scale(.70); }
+
+
+/* Spazio extra quando inizia una sezione: mantiene le tue classi */
+.chord-item.section-start { margin-left: 22px; }
+
+/* margine extra prima di un inizio sezione (spazio visivo) */
+.chord-chip.section-start { margin-left: 22px; }
+
+/* piccolo spazio trasparente tra sezioni nei lyrics */
+.lyrics-list .line.spacer{
+  height: .6rem;
+  opacity: 0;
+  margin: 8px 0;
+}
+
+/* === Lyrics: permetti padding verticale dinamico per centrare sempre la riga === */
+#perf-lyrics { position: relative; }
+#perf-lyrics .lyrics-list{
+  /* questi padding li settiamo via JS ad ogni render */
+  padding-top: var(--ly-pad-top, 0px);
+  padding-bottom: var(--ly-pad-bottom, 0px);
+}
+
+/* === Chords: strip orizzontale più “presente” e scrollabile ma nascosto === */
+#perf-chords { position: relative; }
+.chord-timeline{
+  display:flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  min-height: 40vh;        /* prima occupava ~30%, ora più presente */
+  padding: 12px 0;
+  overflow-x: auto;        /* scroll orizzontale, gestito via JS */
+  overflow-y: hidden;
+  scroll-behavior: smooth; /* smooth nativo per gli aggiustamenti */
+}
+.chord-timeline::-webkit-scrollbar{ display:none; }  /* nascondi scrollbar su WebKit */
+.chord-timeline { scrollbar-width: none; }           /* nascondi su Firefox */
+
+/* Pads “fantasma” ai bordi per centrare primo/ultimo accordo */
+.chord-pad { flex: 0 0 var(--ch-pad, 0px); }
+
+/* Manteniamo le tue classi .chord-item, .small, .past/.future, .lv2-lv4 */
+
+
+/* === Section HUD (sempre visibile) === */
+.section-hud{
+  position: fixed;
+  top: 80px;           /* sotto l’header */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, #0e1013 75%, transparent);
+  backdrop-filter: blur(6px);
+  color: var(--text);
+  font-size: .9rem;
+  box-shadow: 0 6px 24px rgba(0,0,0,.25);
+  pointer-events: none; /* non intercetta click */
+}
+.section-hud .src{
+  font-weight: 700;
+  letter-spacing:.5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #11141a;
+  color: var(--muted);
+}
+.section-hud .curr{ font-weight: 700; }
+.section-hud .sep { opacity:.5 }
+.section-hud .next{ opacity:.9 }
+
+/* in fullscreen da palco avviciniamolo un po’ */
+body.hard-fullscreen .section-hud{ top: 16px }
+
+/* su schermi piccoli stringilo */
+@media (max-width: 640px){
+  .section-hud{ font-size: .85rem; padding: 4px 10px; gap:8px }
+}

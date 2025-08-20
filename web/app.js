@@ -13,6 +13,8 @@
     activeLane: localStorage.getItem('activeLane') || 'lyrics', // lyrics | chords
     server: null, // ultima copia di stato dal server
   };
+
+  
 const CSS_KEYS = [
   'lyrics-bg','lyrics-fg','lyrics-hi','lyrics-font','lyrics-dim','lyrics-alpha',
   'chords-bg','chords-fg','chords-hi','chords-now-font','chords-next-font','chords-alpha'
@@ -31,7 +33,7 @@ function loadCSSVars() {
   lyBg && (lyBg.value = getVar('--lyrics-bg')); lyBgPick && (lyBgPick.value = toColor(getVar('--lyrics-bg')));
   lyFg && (lyFg.value = getVar('--lyrics-fg')); lyFgPick && (lyFgPick.value = toColor(getVar('--lyrics-fg')));
   lyHi && (lyHi.value = getVar('--lyrics-hi')); lyHiPick && (lyHiPick.value = toColor(getVar('--lyrics-hi')));
-  lyFont && (lyFont.value = fromPxVar('--lyrics-font', 10));
+  lyFont && (lyFont.value = fromPxVar('--lyrics-font', 20));
   lyDim && (lyDim.value = fromIntVar('--lyrics-dim', 40));
   lyAlpha && (lyAlpha.value = fromIntVar('--lyrics-alpha', 16));
 
@@ -156,6 +158,133 @@ btnModeSplit ?.addEventListener('click', () => { setPage('performance'); setMode
     else await document.exitFullscreen();
   }
 
+
+
+const RE_SECTION = /^\s*\[([^\]]+)\]\s*$/; // robusto: [Verse], [Chorus 2], etc.
+
+/* Lyrics: esclude le [sections], restituisce anche l'elenco sezioni */
+function parseLyricsWithSections(raw) {
+  const out = { sections: [], lines: [] };
+  if (typeof raw !== 'string') return out;
+  raw.split(/\r?\n/).forEach((line) => {
+    const s = line.trim();
+    if (!s) return;
+    const m = s.match(RE_SECTION);
+    if (m) out.sections.push({ name: m[1].trim(), startIdx: out.lines.length });
+    else out.lines.push({ text: s });
+  });
+  return out;
+}
+
+/* Chords: esclude le [sections], splitta per SPAZI */
+function parseChordsWithSections(raw) {
+  const out = { sections: [], chords: [] };
+  if (typeof raw !== 'string') return out;
+  raw.split(/\r?\n/).forEach((line) => {
+    const s = line.trim();
+    if (!s) return;
+    const m = s.match(RE_SECTION);
+    if (m) out.sections.push({ name: m[1].trim(), startIdx: out.chords.length });
+    else s.split(/\s+/).forEach(tok => { if (tok) out.chords.push({ chord: tok }); });
+  });
+  return out;
+}
+
+function sectionForIndex(sections, idx) {
+  if (!Array.isArray(sections) || sections.length === 0) return null;
+  let cur = sections[0];
+  for (const s of sections) { if (s.startIdx <= idx) cur = s; else break; }
+  return cur;
+}
+
+// Già usi RE_SECTION e sectionForIndex; aggiungo "nextSectionForIndex"
+function nextSectionForIndex(sections, idx){
+  if (!Array.isArray(sections) || !sections.length) return null;
+  // trova la sezione corrente
+  let curr = null, currIdx = -1;
+  sections.forEach((s, i) => { if (s.startIdx <= idx) { curr = s; currIdx = i; } });
+  return sections[currIdx + 1] || null;
+}
+
+// Utility per decidere quale sorgente usare (Lyrics > Chords)
+function computeSectionHUDData() {
+  const st   = state.server || {};
+  const song = st.currentSong || {};
+  const liIdx = st.currentLyricIndex ?? -1;
+  const chIdx = st.currentChordIndex ?? -1;
+
+  let liSecs = song.lyricsSections || [];
+  let chSecs = song.chordsSections || [];
+
+  // Se il server non ha già le sections, prova fallback “grezzo” (se hai salvato raw)
+  // Se il server non ha già le sections, prova fallback “grezzo”
+  if ((!liSecs || !liSecs.length)) {
+    if (typeof song.lyricsRaw === 'string') {
+      try { const p = parseLyricsWithSections(song.lyricsRaw); liSecs = p.sections || []; } catch {}
+    } else if (Array.isArray(song.lyrics)) {
+      // ricostruisci un raw dalle righe (potrebbero contenere [Section])
+      const raw = song.lyrics
+        .map(v => (typeof v === 'string' ? v : (v?.text ?? '')))
+        .filter(Boolean)
+        .join('\n');
+      if (raw) {
+        try { const p = parseLyricsWithSections(raw); liSecs = p.sections || []; } catch {}
+      }
+    }
+  }
+
+  if ((!chSecs || !chSecs.length)) {
+    if (typeof song.chordsRaw === 'string') {
+      try { const p = parseChordsWithSections(song.chordsRaw); chSecs = p.sections || []; } catch {}
+    } else if (Array.isArray(song.chords)) {
+      // se l’array è già tokenizzato, le [Section] potrebbero non esserci più;
+      // ma se sono rimaste in forma stringa le ripeschiamo
+      const raw = song.chords
+        .map(v => (typeof v === 'string' ? v : (v?.chord ?? '')))
+        .filter(Boolean)
+        .join('\n');
+      if (raw && /\[.+\]/.test(raw)) {
+        try { const p = parseChordsWithSections(raw); chSecs = p.sections || []; } catch {}
+      }
+    }
+  }
+  // PRIORITÀ: se lyrics ha sezioni, usa quelle; altrimenti usa chords
+  let src = null, curr = null, next = null;
+
+  if (Array.isArray(liSecs) && liSecs.length) {
+    src  = 'Lyrics';
+    curr = sectionForIndex(liSecs, Math.max(0, liIdx));
+    next = nextSectionForIndex(liSecs, Math.max(0, liIdx));
+  } else if (Array.isArray(chSecs) && chSecs.length) {
+    src  = 'Chords';
+    curr = sectionForIndex(chSecs, Math.max(0, chIdx));
+    next = nextSectionForIndex(chSecs, Math.max(0, chIdx));
+  }
+
+  return { src, currName: curr?.name || null, nextName: next?.name || null };
+}
+
+function updateSectionHUD() {
+  const hud = document.getElementById('sectionHUD');
+  if (!hud) return;
+
+  const { src, currName } = computeSectionHUDData(); // ignoriamo nextName
+
+  if (!src || !currName) {
+    hud.style.display = 'none';
+    return;
+  }
+
+  hud.style.display = 'inline-flex';
+  // Mostra SOLO la sorgente (Lyrics/Chords) + la sezione corrente
+  hud.innerHTML = `
+    <span class="src">${src}</span>
+    <span class="curr">${currName}</span>
+  `;
+}
+
+
+
   // ---------------------------
   // Render
   // ---------------------------
@@ -165,76 +294,162 @@ btnModeSplit ?.addEventListener('click', () => { setPage('performance'); setMode
     songTitle.textContent = s?.title || '—';
   }
 
-  function renderLyrics() {
-    const song = state.server?.currentSong;
-    const idx = state.server?.currentLyricIndex ?? -1;
-    lyricsList.innerHTML = '';
+function renderLyrics() {
+  const song = state.server?.currentSong;
+  const idx  = state.server?.currentLyricIndex ?? -1;
 
-    const lines = Array.isArray(song?.lyrics) ? song.lyrics : [];
-    lines.forEach((line, i) => {
-      const div = document.createElement('div');
-      div.className = 'line' + (i === idx ? ' current' : '');
-      div.textContent = typeof line === 'string' ? line : (line?.text ?? '');
-      lyricsList.appendChild(div);
-    });
+  // Sorgente + sezioni: usa quelle del server se presenti; altrimenti prova a parsare da testo grezzo
+  let lines = Array.isArray(song?.lyrics) ? song.lyrics : [];
+  let sections = song?.lyricsSections || [];
+  let renderList = [];
 
-    // autocentro la riga corrente
-    if (idx >= 0) {
-      const cur = lyricsList.children[idx];
-      if (cur) {
-        cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  if (!sections.length) {
+    // lines potrebbe ancora contenere righe [Section] → filtriamo e inseriamo spacer
+    let lastWasSection = false;
+    lines.forEach((obj) => {
+      const text = typeof obj === 'string' ? obj : (obj?.text ?? '');
+      if (!text) return;
+      const m = text.match(RE_SECTION);
+      if (m) {
+        sections.push({ name: m[1].trim(), startIdx: renderList.length });
+        if (renderList.length && !lastWasSection) renderList.push({ spacer: true });
+        lastWasSection = true;
+      } else {
+        renderList.push({ text });
+        lastWasSection = false;
       }
-    }
+    });
+  } else {
+    // già pulite: costruisci e inserisci spacer ad ogni cambio sezione
+    renderList = lines.map(l => ({ text: (typeof l === 'string' ? l : l.text) || '' }));
+    sections.forEach((sec, si) => {
+      if (si === 0) return;
+      const insertAt = sections[si].startIdx + si - 1;
+      renderList.splice(insertAt, 0, { spacer: true });
+    });
   }
+
+  // Render
+  lyricsList.innerHTML = '';
+  renderList.forEach((item, i) => {
+    if (item.spacer) {
+      const d = document.createElement('div');
+      d.className = 'line spacer';
+      lyricsList.appendChild(d);
+      return;
+    }
+    const d = document.createElement('div');
+    d.className = 'line' + (i === idx ? ' current' : '');
+    d.textContent = item.text;
+    lyricsList.appendChild(d);
+  });
+
+  // Centro fisso: padding dinamico sopra/sotto + scroll al centro
+  const pane = document.getElementById('perf-lyrics');
+  const cur  = lyricsList.children[idx];
+  if (pane && cur) {
+    const paneH = pane.clientHeight;
+    const curH  = cur.clientHeight || 0;
+    const need  = Math.max(0, (paneH/2) - (curH/2));
+    lyricsList.style.setProperty('--ly-pad-top',    need + 'px');
+    lyricsList.style.setProperty('--ly-pad-bottom', need + 'px');
+
+    const target = Math.max(0, cur.offsetTop - (paneH/2) + (curH/2));
+    if (Math.abs(pane.scrollTop - target) > 2) pane.scrollTo({ top: target, behavior: 'smooth' });
+  }
+}
 
 function renderChords() {
   const song = state.server?.currentSong;
-  const idx = state.server?.currentChordIndex ?? -1;
-  const chords = Array.isArray(song?.chords) ? song.chords : [];
+  const idx  = state.server?.currentChordIndex ?? -1;
 
-  // Corrente
-  const now = chords[idx];
-  chordCurrent.textContent = now ? (now.chord ?? String(now)) : '—';
+  // Costruisci lista accordi pulita + sezioni
+  let chords = [];
+  let sections = song?.chordsSections || [];
 
-  // Next 4 – griglia originale
-  chordNext4.innerHTML = '';
-  chordNext4.classList.add('next-grid');
-  for (let k = 1; k <= 4; k++) {
-    const next = chords[idx + k];
-    if (!next) break;
-    const cell = document.createElement('div');
-    cell.className = 'cell';
-    cell.textContent = next.chord ?? String(next);
-    chordNext4.appendChild(cell);
+  if (Array.isArray(song?.chords)) {
+    chords = song.chords
+      .map(c => (typeof c === 'string' ? { chord: c } : c))
+      .filter(x => x && x.chord && !RE_SECTION.test(x.chord)); // safety
+  } else if (typeof song?.chordsRaw === 'string') {
+    const p = parseChordsWithSections(song.chordsRaw);
+    chords = p.chords; sections = p.sections;
   }
 
-  // Lista completa (opzionale)
-  chordsList.innerHTML = '';
-  chords.forEach((c, i) => {
-    const div = document.createElement('div');
-    div.className = 'chord' + (i === idx ? ' active' : '');
-    div.textContent = c.chord ?? String(c);
-    chordsList.appendChild(div);
+  const timeline = document.getElementById('chordTimeline');
+  if (!timeline) return;
+  timeline.innerHTML = '';
+
+  // Pads invisibili ai lati per poter centrare anche 1°/ultimo
+  const padL = document.createElement('div'); padL.className = 'chord-pad';
+  const padR = document.createElement('div'); padR.className = 'chord-pad';
+  timeline.appendChild(padL);
+
+  // Finestra: 3 passati + corrente + 4 futuri = 8 (regolabile)
+  const windowIdx = [];
+  for (let k = 3; k >= 1; k--) windowIdx.push(idx - k);
+  windowIdx.push(idx);
+  for (let k = 1; k <= 4; k++) windowIdx.push(idx + k);
+
+  const sectionStarts = new Set((sections || []).map(s => s.startIdx));
+
+  windowIdx.forEach((i) => {
+    if (i < 0 || i >= chords.length) return;
+
+    const el = document.createElement('div');
+    const isCurrent = i === idx;
+    const dist = Math.abs(i - idx);
+
+    el.className = 'chord-item ' + (isCurrent ? 'current' : (i < idx ? 'past' : 'future')) + (isCurrent ? '' : ' small') + (dist ? ` lv${Math.min(4, dist)}` : '');
+    el.textContent = chords[i].chord;
+
+    // spazio extra all'inizio di ogni sezione (visivo)
+    if (sectionStarts.has(i)) el.classList.add('section-start');
+
+    timeline.appendChild(el);
   });
 
-  // autocentro il corrente in lista completa
-  if (idx >= 0) {
-    const cur = chordsList.children[idx];
-    if (cur) cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  timeline.appendChild(padR);
+
+  // Centro fisso orizzontale indipendente dalla larghezza del simbolo
+  const chips   = Array.from(timeline.querySelectorAll('.chord-item'));
+  const current = chips.find((n) => n.classList.contains('current'));
+  if (!current) return;
+
+  const tlW  = timeline.clientWidth;
+  const curW = current.offsetWidth;
+  const targetLeft = current.offsetLeft - (tlW/2) + (curW/2);
+
+  // Imposta ampiezza pad ai bordi per centrare primo/ultimo
+  const padNeeded = Math.max(0, (tlW/2) - (curW/2));
+  timeline.style.setProperty('--ch-pad', padNeeded + 'px');
+
+  if (Math.abs(timeline.scrollLeft - targetLeft) > 2) {
+    timeline.scrollTo({ left: targetLeft, behavior: 'smooth' });
   }
 }
-  function renderSetlist() {
+
+function renderSetlist() {
     const list = Array.isArray(state.server?.setlist) ? state.server.setlist : [];
     const currentId = state.server?.currentSongId;
     setlistContainer.innerHTML = '';
 
-    if (list.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'setlist-empty';
-      empty.textContent = 'Nessun brano in setlist.';
-      setlistContainer.appendChild(empty);
-      return;
-    }
+if (list.length === 0) {
+  const wrap = document.createElement('div');
+  wrap.className = 'setlist-empty';
+  wrap.innerHTML = `
+    Nessun brano in setlist.
+    <div style="margin-top:8px">
+      <button id="btnLoadDemo">Carica demo</button>
+    </div>
+  `;
+  setlistContainer.appendChild(wrap);
+  wrap.querySelector('#btnLoadDemo')?.addEventListener('click', () => {
+    send('state/resetDemo');
+  });
+  return;
+}
+
 
     list.forEach((song, i) => {
       const card = document.createElement('div');
@@ -258,7 +473,10 @@ card.addEventListener('click', () => {
     renderLyrics();
     renderChords();
     renderSetlist();
+    updateSectionHUD();
   }
+
+  
 
   // ---------------------------
   // WebSocket
@@ -272,6 +490,7 @@ card.addEventListener('click', () => {
       wsDot?.classList.add('on');
       // sync lane al server
       send('ui/setActiveLane', { lane: state.activeLane });
+       send('state/request');
     });
     ws.addEventListener('close', () => {
       wsDot?.classList.remove('on');
@@ -434,12 +653,38 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+window.addEventListener('resize', () => {
+  // forza un re-render “soft” dei centraggi
+  renderLyrics();
+  renderChords();
+});
+
+
 
   // ---------------------------
   // Boot
   // ---------------------------
   connectWS();
   loadCSSVars();
+
+  // Se proprio arriva vuoto, chiedo al server di caricare un demo
+setTimeout(() => {
+  if (!state.server?.setlist?.length) {
+    send('state/loadSession', {
+      session: {
+        id: 'demo-client',
+        title: 'Lyrix Demo (client)',
+        songs: [{
+          id: 'c-001',
+          title: 'Client Demo',
+          programChange: 10,
+          lyrics: [{text:'Riga 1'},{text:'Riga 2'}],
+          chords: [{chord:'Am'},{chord:'F'},{chord:'C'},{chord:'G'}]
+        }]
+      }
+    });
+  }
+}, 400);
 
 
   // Se vuoi caricare una sessione demo al primo avvio, inviala qui:

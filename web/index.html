@@ -82,46 +82,46 @@
     <!-- PAGE: PERFORMANCE (Lyrics/Chords/Split) -->
     <section id="page-performance" class="page active">
       <div id="perf-viewer" class="viewer">
-        <!-- Lyrics pane -->
-        <div id="perf-lyrics" class="pane" tabindex="0" aria-label="Lyrics pane">
-          <h2 class="title">Lyrics</h2>
-          <div class="pane-controls">
-            <button id="lyrPrev">⟵ Prev line</button>
-            <button id="lyrNext">Next line ⟶</button>
-            <span style="opacity:.7;font-size:.9rem">Scorciatoie: ArrowLeft/ArrowRight (se focus Lyrics)</span>
-          </div>
-          <div id="lyricsList">
-            <!-- righe testo render da app.js -->
-          </div>
-        </div>
 
-        <!-- Chords pane -->
-        <div id="perf-chords" class="pane" tabindex="0" aria-label="Chords pane">
-          <h2 class="title">Chords</h2>
-          <div class="pane-controls">
-            <button id="choPrev">⟵ Prev chord</button>
-            <button id="choNext">Next chord ⟶</button>
-            <span style="opacity:.7;font-size:.9rem">Scorciatoie: ArrowLeft/ArrowRight (se focus Chords)</span>
-          </div>
-          <!-- Blocco “now” -->
-          <div class="chords-now">
-            <div class="label">Now</div>
-            <div id="chordCurrent" class="chord">—</div>
-          </div>
+        <!-- Section HUD (sempre visibile) -->
+<div id="sectionHUD" class="section-hud" aria-live="polite">--</div>
 
-          <!-- Blocco “next” in griglia stile originale -->
-          <div class="chords-next">
-            <div class="label">Next 4</div>
-            <div id="chordNext4" class="next-grid">
-              <!-- celle generate da app.js -->
-            </div>
-          </div>
 
-<!-- Lista completa (facoltativa) -->
-<div id="chordsList" style="margin-top:24px"></div>
+<!-- Lyrics pane -->
+<div id="perf-lyrics" class="pane" tabindex="0" aria-label="Lyrics pane">
+  <h2 class="title">Lyrics</h2>
 
-            <!-- lista completa accordi (opzionale) -->
-          </div>
+
+
+  <!-- NAV fissa in basso a destra -->
+  <div class="floating-nav">
+    <button id="lyrPrev">⟵ Prev line</button>
+    <button id="lyrNext">Next line ⟶</button>
+  </div>
+
+  <div id="lyricsList" class="lyrics-list"></div>
+</div>
+
+<!-- Chords pane -->
+<div id="perf-chords" class="pane" tabindex="0" aria-label="Chords pane">
+  <h2 class="title">Chords</h2>
+
+    <!-- sezione attiva -->
+
+
+  <!-- NAV fissa in basso a destra -->
+  <div class="floating-nav">
+    <button id="choPrev">⟵ Prev chord</button>
+    <button id="choNext">Next chord ⟶</button>
+  </div>
+    <!-- Blocco “now” -->
+  <div class="chords-now">
+      <!-- Timeline verticale: passato / corrente / futuro -->
+    <div id="chordTimeline" class="chord-timeline">—</div>
+    
+  </div>
+  </div>
+
         </div>
       </div>
     </section>
