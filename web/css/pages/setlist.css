@@ -1,0 +1,67 @@
+.setlist-layout {
+  display: grid;
+  grid-template-columns: 1fr; /* full finché editor chiuso */
+  gap: 12px;
+  padding: 12px 16px;
+}
+.view-setlist.split .setlist-layout {
+  grid-template-columns: 0.32fr 0.68fr; /* sidebar | editor più grande */
+}
+
+.setlist-sidebar { display: flex; flex-direction: column; gap: 8px; }
+.setlist-body { display: flex; flex-direction: column; gap: 8px; }
+
+.song-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); cursor: pointer; transition: background .2s, border-color .2s;
+}
+.song-item:hover { background: rgba(255,255,255,.06); }
+.song-item.selected { border-color: var(--accent); background: rgba(106,169,255,0.08); }
+
+.editor-host {
+  min-height: 520px;
+  border: 1px solid var(--border);
+  border-radius: 12px; background: var(--surface); overflow: hidden;
+}
+
+/* Editor verticale */
+.editor-panel.vertical { display: grid; grid-template-rows: auto auto auto; gap: 14px; padding: 12px; }
+.editor-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 4px; border-bottom: 1px solid var(--border);
+}
+.editor-block h3 { margin: 6px 0; font-size: 14px; opacity: .9; }
+
+.editor-block textarea {
+  width: 100%; min-height: 220px; resize: vertical;
+  padding: 12px; background: #0f131b; color: var(--fg);
+  border: 1px solid var(--border); border-radius: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 16px; line-height: 1.5;
+}
+.editor-panel.vertical .preview { margin-top: 8px; border-top: 1px dashed var(--border); padding-top: 8px; }
+
+.preview-title { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.lyric-current { font-size: 20px; font-weight: 600; white-space: pre-wrap; }
+
+/* Carosello accordi */
+.chord-carousel { display: flex; gap: 12px; align-items: baseline; flex-wrap: nowrap; overflow: hidden; }
+.chord-token { opacity: .35; font-size: 15px; transition: transform .15s, opacity .15s; white-space: nowrap; }
+.chord-token.near { opacity: .75; font-size: 17px; }
+.chord-token.now  { opacity: 1;   font-size: 24px; font-weight: 700; }
+
+.read-only textarea { opacity: .7; }
+
+
+.empty-state {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  place-items: start;
+  background: rgba(255,255,255,0.02);
+}
+.empty-state .actions { display: flex; gap: 8px; }
+
