@@ -3,30 +3,69 @@ import { store, setState, subscribe } from '../state/store.js';
 export function initShell() {
   const btn = document.getElementById('btn-hamburger');
   const drawer = document.getElementById('app-drawer');
-  const toggleLock = document.getElementById('toggle-lock');
-  const wsInd = document.getElementById('ws-indicator');
+  const btnLock = document.getElementById('btn-lock');  const wsInd = document.getElementById('ws-indicator');
   const clock = document.getElementById('clock');
 
   btn?.addEventListener('click', () => {
     setState(s => { s.ui.drawerOpen = !s.ui.drawerOpen; });
   });
 
-  toggleLock?.addEventListener('change', (e) => {
-    const on = e.target.checked;
-    setState(s => { s.ui.lock = on; });
+    // CLICK sul lucchetto
+  btnLock?.addEventListener('click', () => {
+    setState(s => { s.ui.lock = !s.ui.lock; });
+    // micro anim
+    btnLock.classList.add('pulse');
+    setTimeout(() => btnLock.classList.remove('pulse'), 250);
   });
 
+  // Scorciatoia: Ctrl+Shift+L per toggle Lock
+  window.addEventListener('keydown', (e) => {
+    // evita conflitti in input/textarea
+    const tag = (document.activeElement?.tagName || '').toLowerCase();
+    const isEditing = tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable;
+
+    if (e.ctrlKey && e.shiftKey && (e.key === 'L' || e.key === 'l')) {
+      e.preventDefault();
+      if (isEditing) return;
+      setState(s => { s.ui.lock = !s.ui.lock; });
+      btnLock?.classList.add('pulse');
+      setTimeout(() => btnLock?.classList.remove('pulse'), 250);
+    }
+
+if (e.code === 'Space') {
+    e.preventDefault();
+    window.dispatchEvent(new CustomEvent('lyrix:togglePlay'));
+  }
+
+  // Ctrl + ArrowRight / ArrowLeft → Next / Prev
+  if (e.ctrlKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+    e.preventDefault();
+    const delta = e.key === 'ArrowRight' ? +1 : -1;
+    window.dispatchEvent(new CustomEvent('lyrix:navigateSong', { detail: { delta } }));
+  }
+}, true);
+
+
+  // reactive UI
   subscribe(s => {
     drawer?.setAttribute('aria-hidden', String(!s.ui.drawerOpen));
     document.body.classList.toggle('drawer-open', s.ui.drawerOpen);
-    if (toggleLock) toggleLock.checked = s.ui.lock;
 
+    // lock ui state
+    if (btnLock) {
+      btnLock.setAttribute('aria-checked', String(!!s.ui.lock));
+      btnLock.classList.toggle('on', !!s.ui.lock);
+    }
+
+    // ws indicator color
     wsInd?.classList.toggle('ok', s.runtime.wsStatus === 'connected');
     wsInd?.classList.toggle('bad', s.runtime.wsStatus !== 'connected');
 
     clock?.classList.toggle('hidden', !s.prefs.showClock);
   });
 
+
+  // clock (già presente)
   setInterval(() => {
     if (!store.prefs.showClock || !clock) return;
     const d = new Date();

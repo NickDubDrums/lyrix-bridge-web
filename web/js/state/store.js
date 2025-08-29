@@ -17,7 +17,13 @@ export const store = {
     lyricsLineIdx: 0,
     chordsLineIdx: 0,
     sectionIdx: 0,
-  }
+    transport: {
+      playing: false,
+      playingSongId: null,     // id del brano in esecuzione
+      startedAt: 0,            // timestamp ms di inizio progress corrente
+      loopCount: 0,            // contatore ripetizioni (per LoopSection)
+      pendingNextAfterLoop: false, // se true (in Loop "until input"), passa a next a fine ciclo
+    },  }
 };
 
 export function setState(mutator) {

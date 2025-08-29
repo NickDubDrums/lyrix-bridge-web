@@ -17,6 +17,9 @@
 .app-nav { display: grid; gap: 8px; }
 .nav-link { padding: 10px 12px; border-radius: 8px; }
 .nav-link:hover { background: rgba(255,255,255,.06); }
+.app-title { display:flex; align-items:center; }
+.app-logo { height: 140px; width: auto; display:block; }
+
 
 .app-root {
   padding-top: var(--h);
@@ -24,10 +27,70 @@
   max-width: 1400px; margin: 0 auto;
 }
 
-.ws-indicator { display:inline-block; width:10px; height:10px; border-radius:50%; background:#666; margin-left:8px; }
+.ws-indicator { display:inline-block; width:10px; height:10px; border-radius:50%; background:#666; margin-left:8px; box-shadow: 1px 1px 3px 0 rgb(0, 0, 0); }
 .ws-indicator.ok { background:#3ecf8e; }
 .ws-indicator.bad { background:#cf3e3e; }
 
+
+
+
 .toast-layer, .modal-layer { position: fixed; inset: 0; pointer-events: none; }
 .clock { margin-left: 10px; opacity: .8; }
-.lock-toggle { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Lock button (stroke-only) */
+.lock-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: pointer;
+  box-shadow: 1px 1px 5px 0 rgb(0, 0, 0) ;
+  transition: background .18s ease, border-color .18s ease, box-shadow .18s ease, transform .12s ease;
+}
+.lock-btn:hover { background: rgba(255,255,255,.05); }
+.lock-btn:active { transform: translateY(1px); box-shadow: 1px 1px 5px 0 rgb(0, 0, 0) inset;}
+
+.lock-btn .padlock {
+  display: block;
+}
+.lock-btn .padlock * {
+  fill: none;                     /* <<— niente riempimenti */
+  stroke: #8a9099;                /* colore tratto OFF */
+  stroke-width: 2.2;
+  transition: stroke .18s ease, filter .18s ease, transform .25s ease;
+}
+
+/* Per animare la rotazione solo dell'arco */
+.lock-btn .padlock .shackle {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;     /* cerniera in basso */
+}
+
+/* Stato OFF (sbloccato): arco aperto */
+.lock-btn:not(.on) .padlock .shackle {
+  transform: rotate(-28deg) translateY(-7px);
+}
+
+/* Stato ON (bloccato): colore accent + leggero glow */
+.lock-btn.on {
+  border-color: var(--accent);
+  box-shadow: 1px 1px 5px 0 rgb(0, 0, 0) inset;;
+}
+.lock-btn.on .padlock * {
+  stroke: var(--accent);
+  filter: drop-shadow(0 1px 6px rgba(106,169,255,.35));
+}
+
+/* Micro pulse quando cambia */
+.lock-btn.pulse .padlock { animation: lockPulse .28s ease; }
+@keyframes lockPulse {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}

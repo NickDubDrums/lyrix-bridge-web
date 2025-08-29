@@ -31,12 +31,23 @@ Annota da qualche parte le rotte che useremo:
   <div id="app-shell" class="app-shell">
     <header class="app-header">
       <button id="btn-hamburger" aria-label="Open menu" class="icon-button">☰</button>
-      <h1 class="app-title">Lyrix</h1>
-      <div class="app-actions">
-        <label class="lock-toggle">
-          <input type="checkbox" id="toggle-lock">
-          <span>Lock</span>
-        </label>
+       <div class="app-title">
+          <img src="./assets/LyrixLogo.png" alt="Lyrix" class="app-logo">
+        </div>      <div class="app-actions">
+<button id="btn-lock" class="lock-btn" role="switch" aria-checked="false" title="Lock (Ctrl+Shift+L)">
+  <svg class="padlock" xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 50 50" aria-hidden="true">
+    <!-- Tutto STROKE, niente fill -->
+    <!-- SHACKLE (arco) -->
+    <path class="shackle" d="M15 20 L15 15 C15 9.4355 19.4355 5 25 5 C30.5645 5 35 9.4355 35 15 L35 20"
+          stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    <!-- BODY (rettangolo) -->
+    <path class="body" d="M9 20 L41 20 C42.6455 20 44 21.3545 44 23 L44 47 C44 48.6455 42.6455 50 41 50 L9 50 C7.3545 50 6 48.6455 6 47 L6 23 C6 21.3545 7.3545 20 9 20 Z"
+          stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    <!-- KEYHOLE -->
+    <path class="keyhole" d="M25 30 C23.3 30 22 31.3 22 33 C22 33.9 22.4 34.699 23 35.199 L23 38 C23 39.1 23.9 40 25 40 C26.1 40 27 39.1 27 38 L27 35.199 C27.6 34.699 28 33.9 28 33 C28 31.3 26.7 30 25 30 Z"
+          stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+  </svg>
+</button>
         <span id="ws-indicator" class="ws-indicator" title="WebSocket status"></span>
         <span id="clock" class="clock"></span>
       </div>
