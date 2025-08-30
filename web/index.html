@@ -1,3 +1,17 @@
+<!--Router client‑side, shell con header+hamburger, viste Performance/Setlist/Settings/MIDI
+
+Annota da qualche parte le rotte che useremo:
+
+#/performance
+
+#/setlist
+
+#/setlist/:songId/edit (editor inline)
+
+#/settings
+
+#/midi-->
+
 <!doctype html>
 <html lang="it">
 <head>
@@ -7,237 +21,55 @@
     content="width=device-width, initial-scale=1, viewport-fit=cover"
   />
   <title>Lyrix Bridge</title>
-  <link rel="stylesheet" href="./styles.css" />
-  <style>
-    :root{
-      --bg:#111; --fg:#f2f2f2; --muted:#bdbdbd; --border:#2a2a2a; --accent:#715ee8;
-    }
-    html,body{height:100%}
-    body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  <link rel="stylesheet" href="./css/base.css">
+  <link rel="stylesheet" href="./css/layout.css">
+  <link rel="stylesheet" href="./css/theme.css"> 
+  <link rel="stylesheet" href="./css/pages/setlist.css">
+  <link rel="stylesheet" href="./css/pages/performance.css">
+  <link rel="stylesheet" href="css/modal.css">
 
-    /* Header */
-    header{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)}
-    header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.3px}
-    .status-dot{width:10px;height:10px;border-radius:50%;background:#a33;box-shadow:0 0 0 2px rgba(0,0,0,.2)}
-    .status-dot.on{background:#2dbf6f}
-    .lane-badge{margin-left:8px;padding:2px 8px;border:1px solid var(--border);border-radius:999px;font-size:.8rem;opacity:.9}
-    .header-btn{background:#222;border:1px solid var(--border);padding:6px 10px;border-radius:8px;color:var(--fg);cursor:pointer}
-    .header-btn:hover{filter:brightness(1.1)}
-    .header-select{background:#181818;color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:6px 10px}
-
-    /* Pages */
-    main{height:calc(100vh - 64px)}
-    .page{display:none;height:100%}
-    .page.active{display:block}
-
-    /* Performance viewer */
-    .viewer{height:100%;overflow:hidden}
-    .pane{height:100%;overflow:auto;padding:24px}
-    .pane-controls{display:flex;gap:8px;align-items:center;margin-bottom:12px}
-    .pane-controls button{background:#222;border:1px solid var(--border);padding:6px 10px;border-radius:8px;color:var(--fg);cursor:pointer}
-    .pane-controls button:hover{filter:brightness(1.1)}
-    .title{opacity:.8;margin:0 0 12px 0;font-weight:600;letter-spacing:.4px}
-    .line{font-size:2.2rem;line-height:1.4;margin:12px 0;text-align:center}
-    .line.active{color:var(--accent);font-weight:800}
-    .chord{font-size:3rem;line-height:1.1;margin:10px 0;text-align:center}
-    .chord.active{color:var(--accent);font-weight:800}
-    .next4{opacity:.85;margin-top:16px;font-size:1rem;text-align:center}
-    .next4 span{display:inline-block;margin:0 6px;padding:4px 8px;border:1px solid var(--border);border-radius:8px}
-
-    /* Modes */
-    body.mode-lyrics #perf-lyrics{display:block}
-    body.mode-lyrics #perf-chords{display:none}
-    body.mode-chords #perf-lyrics{display:none}
-    body.mode-chords #perf-chords{display:block}
-    body.mode-split #perf-viewer{display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid var(--border)}
-    body.mode-split #perf-lyrics, body.mode-split #perf-chords{display:block}
-  </style>
 </head>
-<body class="mode-lyrics" data-active-lane="lyrics" data-page="performance">
-  <header>
-    <div class="status-dot" id="wsDot" title="WebSocket status"></div>
-    <h1>Lyrix Bridge</h1>
-
-    <!-- Page switcher -->
-    <select id="pageSelect" class="header-select" title="Seleziona pagina">
-      <option value="performance" selected>Performance</option>
-      <option value="setlist">Setlist</option>
-      <option value="editor">Editor</option>
-    </select>
-
-    <!-- Mode & lane -->
-    <button id="btnModeLyrics" class="header-btn" title="Solo Lyrics (1)">Lyrics</button>
-    <button id="btnModeChords" class="header-btn" title="Solo Chords (2)">Chords</button>
-    <button id="btnModeSplit" class="header-btn" title="Split (3)">Split</button>
-    <div class="lane-badge" id="laneBadge">Focus: Lyrics</div>
-
-
-    <!-- Song title -->
-    <div style="opacity:.7;font-size:.9rem; margin-left: auto;" id="songTitle">—</div>
-  </header>
-
-  <main>
-    <!-- PAGE: PERFORMANCE (Lyrics/Chords/Split) -->
-    <section id="page-performance" class="page active">
-      <div id="perf-viewer" class="viewer">
-
-        <!-- Section HUD (sempre visibile) -->
-<div id="sectionHUD" class="section-hud" aria-live="polite">--</div>
-
-
-<!-- Lyrics pane -->
-<div id="perf-lyrics" class="pane" tabindex="0" aria-label="Lyrics pane">
-  <h2 class="title">Lyrics</h2>
-
-
-
-  <!-- NAV fissa in basso a destra -->
-  <div class="floating-nav">
-    <button id="lyrPrev">⟵ Prev line</button>
-    <button id="lyrNext">Next line ⟶</button>
-  </div>
-
-  <div id="lyricsList" class="lyrics-list"></div>
-</div>
-
-<!-- Chords pane -->
-<div id="perf-chords" class="pane" tabindex="0" aria-label="Chords pane">
-  <h2 class="title">Chords</h2>
-
-    <!-- sezione attiva -->
-
-
-  <!-- NAV fissa in basso a destra -->
-  <div class="floating-nav">
-    <button id="choPrev">⟵ Prev chord</button>
-    <button id="choNext">Next chord ⟶</button>
-  </div>
-    <!-- Blocco “now” -->
-  <div class="chords-now">
-      <!-- Timeline verticale: passato / corrente / futuro -->
-    <div id="chordTimeline" class="chord-timeline">—</div>
-    
-  </div>
-  </div>
-
-        </div>
+<body>
+  <div id="app-shell" class="app-shell">
+    <header class="app-header">
+      <button id="btn-hamburger" aria-label="Open menu" class="icon-button">☰</button>
+       <div class="app-title">
+          <img src="./assets/LyrixLogo.png" alt="Lyrix" class="app-logo">
+        </div>      <div class="app-actions">
+<button id="btn-lock" class="lock-btn" role="switch" aria-checked="false" title="Lock (Ctrl+Shift+L)">
+  <svg class="padlock" xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 50 50" aria-hidden="true">
+    <!-- Tutto STROKE, niente fill -->
+    <!-- SHACKLE (arco) -->
+    <path class="shackle" d="M15 20 L15 15 C15 9.4355 19.4355 5 25 5 C30.5645 5 35 9.4355 35 15 L35 20"
+          stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    <!-- BODY (rettangolo) -->
+    <path class="body" d="M9 20 L41 20 C42.6455 20 44 21.3545 44 23 L44 47 C44 48.6455 42.6455 50 41 50 L9 50 C7.3545 50 6 48.6455 6 47 L6 23 C6 21.3545 7.3545 20 9 20 Z"
+          stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    <!-- KEYHOLE -->
+    <path class="keyhole" d="M25 30 C23.3 30 22 31.3 22 33 C22 33.9 22.4 34.699 23 35.199 L23 38 C23 39.1 23.9 40 25 40 C26.1 40 27 39.1 27 38 L27 35.199 C27.6 34.699 28 33.9 28 33 C28 31.3 26.7 30 25 30 Z"
+          stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+  </svg>
+</button>
+        <span id="ws-indicator" class="ws-indicator" title="WebSocket status"></span>
+        <span id="clock" class="clock"></span>
       </div>
-    </section>
+    </header>
 
-    <!-- PAGE: SETLIST (Play/Stop + prev/next song) -->
-    <section id="page-setlist" class="page">
-      <div style="padding:16px">
-        <h2 class="title">Setlist</h2>
-        <div class="pane-controls" style="margin-bottom:16px">
-          <button id="setlistPrev">⟵ Prev song</button>
-          <button id="setlistPlay">▶︎ Play</button>
-          <button id="setlistStop">■ Stop</button>
-          <button id="setlistNext">Next song ⟶</button>
-          <span style="opacity:.7;font-size:.9rem">Questi comandi agiscono solo qui.</span>
-        </div>
-        <div id="setlistContainer">
-          <!-- lista brani con selezione (render da app.js) -->
-        </div>
-      </div>
-    </section>
+    <aside id="app-drawer" class="app-drawer" aria-hidden="true">
+      <nav class="app-nav">
+        <a href="#/performance" class="nav-link">Performance</a>
+        <a href="#/setlist" class="nav-link">Setlist</a>
+        <a href="#/settings" class="nav-link">Settings</a>
+        <a href="#/midi" class="nav-link">MIDI</a>
+      </nav>
+    </aside>
 
-    <!-- PAGE: EDITOR (semplice placeholder; manteniamo la struttura) -->
-    <section id="page-editor" class="page">
-      <div style="padding:16px;display:grid;gap:16px;grid-template-columns:1fr 1fr">
-        <div>
-          <h2 class="title">Editor Lyrics</h2>
-          <textarea id="editorLyrics" rows="18" style="width:100%;background:#181818;color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:12px"></textarea>
-          <div class="pane-controls" style="margin-top:8px">
-            <button id="editorSaveLyrics">Salva Lyrics</button>
-          </div>
-        </div>
-        <div>
-          <h2 class="title">Editor Chords</h2>
-          <textarea id="editorChords" rows="18" style="width:100%;background:#181818;color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:12px"></textarea>
-          <div class="pane-controls" style="margin-top:8px">
-            <button id="editorSaveChords">Salva Chords</button>
-          </div>
-          
-        </div>
-      </div>
+    <main id="app-root" class="app-root" role="main"></main>
 
-      <hr class="edit-options"/>
-
-<div class="grid-three" style="margin-top:12px">
-  <div>
-    <h3 class="title">Lyrics Display</h3>
-    <div class="color-field">
-      <label>BG</label>
-      <input id="ly-bg" type="text" value="#111111">
-      <input id="ly-bg-pick" type="color" value="#111111">
-    </div>
-    <div class="color-field" style="margin-top:8px">
-      <label>FG</label>
-      <input id="ly-fg" type="text" value="#f2f2f2">
-      <input id="ly-fg-pick" type="color" value="#f2f2f2">
-    </div>
-    <div class="color-field" style="margin-top:8px">
-      <label>HI</label>
-      <input id="ly-hi" type="text" value="#277eff">
-      <input id="ly-hi-pick" type="color" value="#277eff">
-    </div>
-    <div style="margin-top:8px">
-      <label>Font (px)</label>
-      <input id="ly-font" type="range" min="20" max="160" step="2">
-    </div>
-    <div style="margin-top:8px">
-      <label>Dim (%)</label>
-      <input id="ly-dim" type="range" min="0" max="90" step="1">
-    </div>
-    <div style="margin-top:8px">
-      <label>HI Alpha</label>
-      <input id="ly-alpha" type="range" min="0" max="40" step="1">
-    </div>
+    <div id="toast-layer" class="toast-layer" aria-live="polite"></div>
+    <div id="modal-layer" class="modal-layer" aria-hidden="true"></div>
   </div>
 
-  <div>
-    <h3 class="title">Chords Display</h3>
-    <div class="color-field">
-      <label>BG</label>
-      <input id="ch-bg" type="text" value="#0b0b0e">
-      <input id="ch-bg-pick" type="color" value="#0b0b0e">
-    </div>
-    <div class="color-field" style="margin-top:8px">
-      <label>FG</label>
-      <input id="ch-fg" type="text" value="#f2f2f2">
-      <input id="ch-fg-pick" type="color" value="#f2f2f2">
-    </div>
-    <div class="color-field" style="margin-top:8px">
-      <label>HI</label>
-      <input id="ch-hi" type="text" value="#277eff">
-      <input id="ch-hi-pick" type="color" value="#277eff">
-    </div>
-    <div style="margin-top:8px">
-      <label>Now Font (px)</label>
-      <input id="ch-now" type="range" min="24" max="120" step="2">
-    </div>
-    <div style="margin-top:8px">
-      <label>Next Font (px)</label>
-      <input id="ch-next" type="range" min="12" max="64" step="1">
-    </div>
-    <div style="margin-top:8px">
-      <label>HI Alpha</label>
-      <input id="ch-alpha" type="range" min="0" max="40" step="1">
-    </div>
-  </div>
-
-  <div>
-    <h3 class="title">Stage Fullscreen</h3>
-    <p style="opacity:.8">Nasconde header e riempie tutto lo schermo con il solo stage (Lyrics/Chords).</p>
-    <button id="stageEnter">Entra Stage Fullscreen</button>
-    <button id="stageExit" style="background:#444">Esci Stage Fullscreen</button>
-    <p style="opacity:.7;margin-top:8px">Shortcut: <b>F</b> per fullscreen nativo, <b>Ctrl+F</b> per “Stage Fullscreen”.</p>
-  </div>
-</div>
-
-    </section>
-  </main>
-
-  <script src="./app.js"></script>
+  <script type="module" src="./js/main.js"></script>
 </body>
 </html>

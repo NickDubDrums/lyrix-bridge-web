@@ -1,0 +1,100 @@
+--SPOSTAMENTI DEL CSS
+base.css → reset, tipografia base, variabili CSS “globali” (font‑sizes, spaziature, z‑index, radius).
+
+layout.css → griglie, flex layout principali, header, sidebar/hamburger, contenitori delle viste.
+
+theme.css → palette (light/dark), token colore semantic (primary/surface/text/ok/warn), ombre, transizioni di base.
+
+pages/*.css** → specifici di ciascuna vista (Performance, Setlist, Settings, MIDI).
+
+--Pianificazione Shell 
+Cosa fare
+Definisci la struttura della Shell che inseriremo dentro index.html:
+
+Header fisso (alto ~64px) con:
+
+Pulsante hamburger (apre/chiude il drawer sinistro).
+
+Titolo app o logo.
+
+A destra: Lock toggle (globale), stato WS (pallino), orologio (opzionale).
+
+Drawer laterale con voce di menu: Performance, Setlist, Settings, MIDI.
+
+Main content: area che ospita le viste (router le cambierà).
+
+Overlay per modali e toasts.
+
+-Criteri di verifica
+
+Hai definito quali elementi compongono la shell e dove appariranno.
+
+È chiaro che la Setlist con editor inline vivrà nella vista Setlist (non nella shell).
+
+
+--Stato applicativo: chiavi minime e policy
+
+Definisci (nel tuo documento TODO/notes) lo schema logico dello stato iniziale (nessun codice):
+
+ui:
+
+route (stringa tipo #/setlist o #/setlist/abc123/edit)
+
+editorOpen (boolean)
+
+editorSongId (stringa o null)
+
+drawerOpen (boolean) — per hamburger
+
+lock (boolean)
+
+data:
+
+songs (mappa id → song)
+
+setlist (array di id + eventuali override)
+
+prefs:
+
+visibilità elementi in Performance (section, bpm, duration, clock)
+
+tema e preset GUI
+
+runtime:
+
+wsStatus (connected/disconnected)
+
+dirty flags per lyrics/chords in editor
+
+Policy
+
+Persistenza in localStorage per data e prefs; ui e runtime sono volatili.
+
+Lock globale influenza drag&drop, editability e comandi “play”.
+
+Criteri di verifica
+
+Schema chiavi approvato.
+
+Regole chiare su cosa persiste e cosa no.
+
+--Route e UX dell’editor inline (definitiva)
+
+Cosa fare
+Conferma la UX già definita:
+
+Apri editor: doppio click o icona matita su una song → la setlist si riduce a sidebar (35–40%) e compare editor a destra.
+
+Route: #/setlist/:songId/edit.
+
+Cambia song in editor: cliccando un’altra song nella sidebar, l’editor carica quella (stessa route aggiornata).
+
+Chiudi editor: X nell’editor o Esc → ritorna a #/setlist.
+
+Lock ON: nessuna apertura editor, icone edit disabilitate con tooltip.
+
+Criteri di verifica
+
+Hai deciso le scorciatoie (Enter per aprire editor; Esc per chiudere; Cmd/Ctrl+S per “save”).
+
+Breakpoint UI: desktop split, tablet split 40/60, mobile editor fullscreen con setlist in drawer.
