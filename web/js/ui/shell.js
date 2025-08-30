@@ -32,11 +32,13 @@ export function initShell() {
       setTimeout(() => btnLock?.classList.remove('pulse'), 250);
     }
 
-if (e.code === 'Space') {
+  // Space → Play/Pause SOLO se non stai scrivendo
+  if (e.code === 'Space') {
+    if (isEditing) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     e.preventDefault();
     window.dispatchEvent(new CustomEvent('lyrix:togglePlay'));
   }
-
   // Ctrl + ArrowRight / ArrowLeft → Next / Prev
   if (e.ctrlKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
     e.preventDefault();

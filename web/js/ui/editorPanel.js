@@ -1,4 +1,5 @@
-import { store, setState, subscribe } from '../state/store.js';
+import { store, setState, subscribe, exportSongJSON } from '../state/store.js';
+
 
 const RE_SECTION = /^\s*\[([^\]]+)\]\s*$/;
 
@@ -102,8 +103,8 @@ export function createEditorPanel(song, opts = {}) {
     <div class="editor-topbar">
       <div>Section: <strong id="sec-name">Default</strong></div>
       <div class="actions">
-        <button id="btn-save" class="btn primary">Save Song</button>
-        <button id="btn-close" class="btn danger">✕</button>
+      <button id="btn-save" class="btn primary">Save Song</button>
+      <button id="btn-close" class="btn danger">✕</button>
       </div>
     </div>
 
@@ -183,6 +184,11 @@ export function createEditorPanel(song, opts = {}) {
           </div>
         </div>
       </section>
+
+      
+    </div>
+    <div>
+    <button id="btn-export" class="btn primary">Export Song</button>
     </div>
   `;
 
@@ -190,6 +196,7 @@ export function createEditorPanel(song, opts = {}) {
   const $sec = root.querySelector('#sec-name');
   const $btnSave = root.querySelector('#btn-save');
   const $btnClose = root.querySelector('#btn-close');
+  const $btnExport = root.querySelector('#btn-export');
   const $tabs = [...root.querySelectorAll('.tab-btn')];
   const $underline = root.querySelector('.tab-underline');
   const $panels = {
@@ -254,7 +261,29 @@ applyArrangerVisibility();
 // Aggiorna visibilità quando cambia la mode nel select
 $metaBehavior.addEventListener('change', applyArrangerVisibility);
 
+function downloadJSON(filename, obj) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+}
 
+$btnExport.addEventListener('click', () => {
+  // salva prima per sicurezza
+  saveSong();
+
+  const id = store.ui.editorSongId;
+  const payload = exportSongJSON(id);
+  if (!payload) return;
+
+  const title = (store.data.songs[id]?.title || id).replace(/\s+/g, '-');
+  downloadJSON(`${title}.lyrix-song.json`, payload);
+
+  $btnExport.textContent = 'Exported ✓';
+  setTimeout(() => $btnExport.textContent = 'Export Song', 900);
+});
 
   // --- Tabs behavior ---------------------------------------------------------
   function updateUnderline() {
@@ -435,6 +464,7 @@ $metaBehavior.addEventListener('change', applyArrangerVisibility);
   // --- Eventi ---------------------------------------------------------------
   $btnSave.addEventListener('click', () => {
     saveSong();
+     window.dispatchEvent(new HashChangeEvent('hashchange'));
     $btnSave.textContent = 'Saved ✓';
     setTimeout(() => $btnSave.textContent = 'Save Song', 900);
   });

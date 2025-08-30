@@ -302,3 +302,20 @@
 /* Ghost/chosen non invasivi (compatibili con il tuo design) */
 .drag-chosen { opacity: .96; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
 .drag-ghost   { opacity: .6; }
+
+.view-setlist.is-locked .drag-handle { cursor: not-allowed; opacity: .5; }
+.view-setlist.is-locked .song-item { cursor: default; }
+
+
+.song-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;     /* spazio tra maniglia e meta */
+  min-width: 0;  /* evita overflow del titolo */
+}
+
+.song-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;      /* “qualche pixel di gap” tra Edit e Delete */
+}
