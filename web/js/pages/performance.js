@@ -4,6 +4,29 @@ import { store, setState, subscribe } from '../state/store.js';
 // Riconosce linee tipo [Verse], [Chorus 2], ecc.
 const RE_SECTION = /^\s*\[[^\]]+\]\s*$/;
 
+
+const PERF_DEFAULTS_REV = 4; // incrementa quando cambi i default
+
+const PERF_DEFAULTS = {
+
+  //LYRICS Default
+  lyricsSize: 42,
+  chordsSize: 28,
+  textColor: '#f2f2f2',
+  currentColor: '#ffffff',
+  bgColor: '#101014',
+  lineGap: 40,
+  splitRatio: 50,
+  splitEnabled: true,
+
+// CHORDS defaults
+chordsLineGap: 25,
+chordsOpacityDim: 0.28,
+chordsScaleCurrent: 1.80,
+chordsScaleSecondary: 1.5,
+chordsSectionGap: 28,
+};
+
 function isSection(line) {
   const t = (typeof line === 'string' ? line : (line?.text ?? '')).trim();
   return RE_SECTION.test(t);
@@ -69,19 +92,92 @@ function parseLyricsVisual(rawLyrics) {
   return { visual, visualToTextIdx };
 }
 
+// Converte l'array chords (stringhe o oggetti) in visual come i lyrics:
+// - righe normali -> { type:'line', text: '...' }
+// - [Section]     -> { type:'gap' }
+function parseChordsVisual(rawChords) {
+  const lines = Array.isArray(rawChords) ? rawChords : [];
+  const visual = [];
+  for (let i = 0; i < lines.length; i++) {
+    const entry = lines[i];
+    const s = (typeof entry === 'string'
+      ? entry
+      : (entry?.chord ?? entry?.text ?? '')
+    ).trim();
+    if (RE_SECTION.test(s)) {
+      if (visual.length && visual[visual.length - 1].type !== 'gap') {
+        visual.push({ type: 'gap' });
+      }
+      continue;
+    }
+    visual.push({ type:'line', text: s });
+  }
+  while (visual.length && visual[visual.length - 1].type === 'gap') visual.pop();
+  return { visual };
+}
+
+// Converte "song.chords" in un array di stringhe pulite
+function normalizeChordsArray(chords) {
+  const arr = Array.isArray(chords) ? chords : [];
+  return arr.map(x => {
+    if (typeof x === 'string') return x.trim();
+    return String(x?.chord ?? x?.text ?? '').trim();
+  });
+}
+
+
+// Spezza una riga di accordi in token (separati da spazi)
+function chordTokens(line) {
+  const s = String(line || '').trim();
+  if (!s) return [];
+  return s.split(/\s+/).map(t => ({ text: t }));
+}
+
+
+// Ricava il nome della [Section] per una data vline (array di stringhe tipo lyrics/chords)
+function currentSectionNameFromStrings(strArr, vline) {
+  const raw = Array.isArray(strArr) ? strArr.map(x => String(x ?? '').trim()) : [];
+  // mappa vline (solo righe non-section) -> indice fisico
+  let vcount = -1, phys = -1;
+  for (let i = 0; i < raw.length; i++) {
+    if (RE_SECTION.test(raw[i])) continue;
+    vcount++;
+    if (vcount === vline) { phys = i; break; }
+  }
+  if (phys < 0) phys = 0;
+  for (let i = phys; i >= 0; i--) {
+    const m = raw[i].match(/^\s*\[([^\]]+)\]\s*$/);
+    if (m) return m[1].trim();
+  }
+  return '';
+}
+
 
 function getPerfPrefs() {
-  const p = store.prefs?.performance || {};
-  return {
-    lyricsSize: p.lyricsSize ?? 42,
-    chordsSize: p.chordsSize ?? 28,
-    textColor: p.textColor ?? '#f2f2f2',
-    currentColor: p.currentColor ?? '#ffffff',
-    bgColor: p.bgColor ?? '#101014',
-    lineGap: p.lineGap ?? 40,
-    splitRatio: p.splitRatio ?? 50,
-    splitEnabled: p.splitEnabled ?? true,
-  };
+  const u = store.prefs?.performance || {};
+
+  if (u.__rev !== PERF_DEFAULTS_REV) {
+    // Campi che vuoi RESETTARE ai nuovi default in questo bump:
+const FORCE_RESET = [
+  'chordsLineGap',
+  'chordsOpacityDim',
+  'chordsScaleCurrent',
+  'chordsScaleSecondary',
+  'chordsSectionGap',
+];
+
+    const u2 = { ...u };
+    FORCE_RESET.forEach(k => delete u2[k]);
+
+    const merged = { ...PERF_DEFAULTS, ...u2, __rev: PERF_DEFAULTS_REV };
+    setState(s => {
+      s.prefs = s.prefs || {};
+      s.prefs.performance = merged;
+    });
+    return merged;
+  }
+
+  return { ...PERF_DEFAULTS, ...u };
 }
 
 function applyPerfVars(node) {
@@ -100,6 +196,13 @@ function applyPerfVars(node) {
   node.style.setProperty('--lyrics-dim', String(p.lyricsOpacityDim ?? 0.28));
   node.style.setProperty('--lyrics-current-scale', String(p.lyricsScaleCurrent ?? 1.06));
 
+    // ✨ NUOVE: specifiche per CHORDS
+  node.style.setProperty('--chords-line-gap', p.chordsLineGap + 'px');
+  node.style.setProperty('--chords-dim', String(p.chordsOpacityDim));
+  node.style.setProperty('--chords-current-scale', String(p.chordsScaleCurrent));
+  node.style.setProperty('--chords-secondary-scale', String(p.chordsScaleSecondary));
+  node.style.setProperty('--chords-section-gap', p.chordsSectionGap + 'px');
+
 }
 
 function currentSong(state) {
@@ -111,9 +214,15 @@ function currentSong(state) {
 // FIX: runtime sicuro con fallback + inizializzazione
 function getRuntimeSafe() {
   let perf = store?.runtime?.performance;
-  const needsInit = !perf || typeof perf.vline !== 'number'; // 'vline' = indice visuale
+  const needsInit = !perf || typeof perf.vline !== 'number';
   if (needsInit) {
-    perf = { vline: 0, songId: null };
+    perf = {
+      view: 'lyrics',   // 'lyrics' | 'chords'
+      songId: null,
+      vline: 0,         // indice tra le sole linee "line" per LYRICS
+      choLine: 0,       // indice tra le sole linee "line" per CHORDS
+      choTok: 0         // indice token nella riga CHORDS corrente
+    };
     setState(s => {
       s.runtime = s.runtime || {};
       s.runtime.performance = { ...perf };
@@ -161,7 +270,7 @@ export function renderPerformance() {
       <!-- (i pulsanti view li lasciamo, ma useremo solo Lyrics per ora) -->
       <div class="segmented" role="tablist" aria-label="View mode">
         <button class="btn ghost small" id="btn-view-lyrics" role="tab" aria-pressed="true">Lyrics</button>
-        <button class="btn ghost small" id="btn-view-chords" role="tab" aria-pressed="false" title="Soon" disabled>Chords</button>
+        <button class="btn ghost small" id="btn-view-chords" role="tab" aria-pressed="false">Chords</button>
         <button class="btn ghost small" id="btn-view-split"  role="tab" aria-pressed="false" title="Soon" disabled>Split</button>
       </div>
     </div>
@@ -174,6 +283,7 @@ export function renderPerformance() {
         <div class="section-indicator" id="perf-section"></div>
       </div>
       <div class="lyrics" part="lyrics"></div>
+      <div class="chords" part="chords" style="display:none"></div>
     </div>
   </div>
 `;
@@ -183,6 +293,10 @@ const stage   = el.querySelector('.performance-stage');
 const vTitle  = el.querySelector('#perf-title');
 const vSec    = el.querySelector('#perf-section');
 const vLyrics = el.querySelector('.lyrics');
+const vChords = el.querySelector('.chords');
+const $btnLyrics = el.querySelector('#btn-view-lyrics');
+const $btnChords = el.querySelector('#btn-view-chords');
+
 
 
 
@@ -204,6 +318,101 @@ const { visual, visualToTextIdx } = parseLyricsVisual(song.lyrics);
 
 // Recupera runtime sicuro
 const rt = getRuntimeSafe();
+
+// Toggle viste + aria-pressed (non tocca la logica dei Lyrics)
+$btnLyrics.setAttribute('aria-pressed', String(rt.view === 'lyrics'));
+$btnChords.setAttribute('aria-pressed', String(rt.view === 'chords'));
+
+if (rt.view === 'chords') {
+  vLyrics.style.display = 'none';
+  vChords.style.display = '';
+
+  // 1) Normalizza e costruisci visual chords
+  const chordStrings = normalizeChordsArray(song.chords);
+  const { visual } = parseChordsVisual(chordStrings);
+
+  // Se non ci sono righe utili, mostra un messaggio chiaro e interrompi
+if (!visual.some(x => x.type === 'line')) {
+  vChords.dataset.songId = String(song.id);
+  vChords.innerHTML = `<p class="muted">No chords found in this song.</p>`;
+  vTitle.textContent = song.title || 'Untitled';
+  vSec.textContent = '';
+  return;
+}
+
+
+  // 2) Rebuild se cambia brano
+  const needsBuild = !vChords.dataset.songId || vChords.dataset.songId !== String(song.id);
+  if (needsBuild) {
+    vChords.dataset.songId = String(song.id);
+    vChords.innerHTML = visual.map((item, idx) => {
+      if (item.type === 'gap') return `<div class="gap"></div>`;
+      const toks = chordTokens(item.text);
+      const html = toks.map((t, ti) =>
+        `<span class="chord-token" data-tok="${ti}">${t.text}</span>`
+      ).join(' ');
+      return `<div class="line" data-role="line" data-vidx="${idx}">${html || '&nbsp;'}</div>`;
+    }).join('');
+  }
+
+  // 3) Inizializza / clamp indici runtime per CHORDS
+  const chordLines = visual.filter(x => x.type === 'line');
+  const totalChordLines = chordLines.length;
+  const rtPerf = getRuntimeSafe();
+
+  // Se è cambiato brano: resetta indici
+  if (song.id !== rt.songId) {
+    rt.vline = 0;
+    rt.choLine = 0;   // <-- aggiunta
+    rt.choTok  = 0;   // <-- aggiunta
+    rt.songId  = song.id;
+    setState(ss => { ss.runtime.performance = { ...rt }; });
+  }
+
+  rtPerf.choLine = clamp(rtPerf.choLine ?? 0, 0, Math.max(0, totalChordLines - 1));
+
+  // 4) Mappa choLine -> indice VISUALE
+  let targetVisualIdx = -1, count = -1;
+  for (let i = 0; i < visual.length; i++) {
+    if (visual[i].type === 'line') {
+      count++;
+      if (count === rtPerf.choLine) { targetVisualIdx = i; break; }
+    }
+  }
+  if (targetVisualIdx < 0) {
+    // fallback: prima riga utile
+    targetVisualIdx = visual.findIndex(x => x.type === 'line');
+  }
+
+  // 5) Toggle della riga corrente + evidenzia token attivo
+  vChords.querySelectorAll('.line.current').forEach(n => n.classList.remove('current'));
+  vChords.querySelectorAll('.chord-token.now').forEach(n => n.classList.remove('now'));
+
+  const curLineEl = vChords.children[targetVisualIdx];
+  if (curLineEl) {
+    curLineEl.classList.add('current');
+
+    const toks = curLineEl.querySelectorAll('.chord-token');
+    if (toks.length) {
+      rtPerf.choTok = clamp(rtPerf.choTok ?? 0, 0, toks.length - 1);
+      toks[rtPerf.choTok].classList.add('now');
+    } else {
+      rtPerf.choTok = 0;
+    }
+
+    // 6) Scroll morbido al centro (stessa funzione dei lyrics)
+    smoothScrollToCenter(vChords, curLineEl, 420);
+  }
+
+  // 7) Header (titolo + section)
+  vTitle.textContent = song.title || 'Untitled';
+  vSec.textContent = currentSectionNameFromStrings(chordStrings, rtPerf.choLine || 0) || '';
+
+} else {
+  // Lyrics invariato
+  vChords.style.display = 'none';
+  vLyrics.style.display = '';
+}
 
 // Se è cambiato brano: resetta vline
 if (song.id !== rt.songId) {
@@ -275,28 +484,76 @@ vSec.textContent = name || '';
 function onKey(e) {
   if (!document.body.contains(el)) return;
 
-  // Consideriamo solo su/giù per Lyrics testing
-  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-
   const song = currentSong(store);
   if (!song) return;
-  e.preventDefault();
-
-  const { visual } = parseLyricsVisual(song.lyrics);
-  const totalLines = visual.filter(item => item.type === 'line').length;
-
-  if (totalLines === 0) return;
 
   const rt = getRuntimeSafe();
-  if (e.key === 'ArrowUp') {
-    rt.vline = Math.max(0, rt.vline - 1);
-  } else {
-    rt.vline = Math.min(totalLines - 1, rt.vline + 1);
+
+  // === LYRICS: su/giù (come prima)
+  if (rt.view === 'lyrics' && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    e.preventDefault();
+    const { visual } = parseLyricsVisual(song.lyrics);
+    const totalLines = visual.filter(item => item.type === 'line').length;
+    if (totalLines === 0) return;
+
+    if (e.key === 'ArrowUp')   rt.vline = Math.max(0, rt.vline - 1);
+    if (e.key === 'ArrowDown') rt.vline = Math.min(totalLines - 1, rt.vline + 1);
+
+    setState(s => { s.runtime.performance = { ...rt }; });
+    return;
   }
-  setState(s => { s.runtime.performance = { ...rt }; });
+
+  // === CHORDS: sinistra/destra con wrap automatico
+  if (rt.view === 'chords' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    e.preventDefault();
+
+    const chordStrings = normalizeChordsArray(song.chords);
+    const { visual } = parseChordsVisual(chordStrings);
+    const chordLines = visual.filter(x => x.type === 'line');
+    if (!chordLines.length) return;
+
+    rt.choLine = clamp(rt.choLine ?? 0, 0, chordLines.length - 1);
+    const tokens = chordTokens(chordLines[rt.choLine]?.text || '');
+    const lastTokIdx = Math.max(0, tokens.length - 1);
+
+    if (e.key === 'ArrowRight') {
+      if ((rt.choTok ?? 0) < lastTokIdx) {
+        rt.choTok = (rt.choTok ?? 0) + 1;
+      } else if (rt.choLine < chordLines.length - 1) {
+        rt.choLine += 1;
+        rt.choTok = 0;
+      }
+    } else if (e.key === 'ArrowLeft') {
+      if ((rt.choTok ?? 0) > 0) {
+        rt.choTok = (rt.choTok ?? 0) - 1;
+      } else if (rt.choLine > 0) {
+        rt.choLine -= 1;
+        const prevTokens = chordTokens(chordLines[rt.choLine]?.text || '');
+        rt.choTok = Math.max(0, prevTokens.length - 1);
+      }
+    }
+
+    setState(s => { s.runtime.performance = { ...rt }; });
+    return;
+  }
 }
 
 window.addEventListener('keydown', onKey);
+
+$btnLyrics.addEventListener('click', () => {
+  const rt = getRuntimeSafe();
+  if (rt.view !== 'lyrics') {
+    setState(s => { s.runtime.performance.view = 'lyrics'; });
+  }
+});
+
+$btnChords.addEventListener('click', () => {
+  const rt = getRuntimeSafe();
+  if (rt.view !== 'chords') {
+    setState(s => { s.runtime.performance.view = 'chords'; });
+  }
+});
+
 
   // Cleanup
   el.addEventListener('DOMNodeRemoved', (e) => {
