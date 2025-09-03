@@ -4,7 +4,7 @@ import {
   addSong, removeSong,
   exportSetlistJSON, importSongJSON, importSetlistJSON
 } from '../state/store.js';
-
+import { Realtime } from '../state/ws.js';
 import { createEditorPanel } from '../ui/editorPanel.js';
 import { makeSortable } from '../ui/dragdrop.js';
 import { modalAlert, modalConfirm, modalPrompt } from '../ui/modals.js';
@@ -43,6 +43,14 @@ export function renderSetlist() {
   const btnStop = header.querySelector('#btn-stop');
   const btnNext = header.querySelector('#btn-next');
 
+  const onQueuedSync = (ev) => {
+    const qid = ev?.detail?.queuedSongId ?? undefined;
+    highlightQueuedDOM(qid);
+  };
+  window.addEventListener('lyrix:queued-sync', onQueuedSync);
+
+
+
   // Allinea SUBITO l’icona Play/Pause allo stato corrente (fix quando apri l’editor)
   btnPlay.textContent = store.runtime.transport.playing ? '⏸' : '▶︎';
 
@@ -58,6 +66,8 @@ export function renderSetlist() {
     const sec = Number(song?.duration ?? 0);
     return Number.isFinite(sec) && sec > 0 ? sec : 180; // fallback 3:00
   }
+
+  
 
   // ── Icons for Loop Exit (tutte a currentColor)
   const ICON_LOOP_FINISH = `
@@ -142,14 +152,19 @@ export function renderSetlist() {
   }
 
   // Evidenzia "in coda" (blinking) nel DOM
-  function highlightQueuedDOM() {
-    const container = document.querySelector('.view-setlist .setlist-body') || document;
-    const queued = String(store.runtime.transport?.queuedSongId ?? '');
-    const els = container.querySelectorAll('[data-id]');
-    els.forEach(el => {
-      const isQueued = (String(el.dataset.id || '') === queued);
-      if (isQueued) el.classList.add('queued');
-      else el.classList.remove('queued');
+  function highlightQueuedDOM(overrideId) {
+    const container = wrap.querySelector('.setlist-body') || wrap;
+    if (!container) return;
+  
+    const queued = String(
+      overrideId !== undefined
+        ? overrideId
+        : (store.runtime.transport?.queuedSongId ?? '')
+    );
+  
+    container.querySelectorAll('[data-id]').forEach(el => {
+      const isQueued = (String(el.dataset.id || '') === queued) && !!queued;
+      el.classList.toggle('queued', isQueued);
     });
   }
 
@@ -192,66 +207,84 @@ export function renderSetlist() {
     updateProgressImmediate();
     highlightSelectionDOM();
     highlightQueuedDOM();
+    Realtime.send('transport/stop');
+
   }
 
   // Play/Pause con resume intelligente
-  function setPlaying(on) {
-    const wasPlaying = store.runtime.transport.playing;
-    const now = performance.now();
+// Play/Pause con resume intelligente
+function setPlaying(on, origin = 'local') {
+  const wasPlaying = store.runtime.transport.playing;
+  const now = performance.now();
 
-    setState(s => {
-      if (on && !wasPlaying) {
-        const ids = (s.data.setlist || []).map(nId);
-        const sel = nId(s.ui.selectedSongId || ids[0] || null);
+  // ---- CATTURO PRIMA DI MUTARE LO STATO (per il payload di 'pause') ----
+  const prevSongId     = store.runtime.transport.playingSongId || store.ui.selectedSongId;
+  const prevStartedAt  = store.runtime.transport.startedAt || 0;
+  const pausedForServer = (!on && wasPlaying) ? Math.max(0, now - prevStartedAt) : 0;
 
-        // resume se pausa della stessa song
-        if (s.runtime.transport.pausedSongId === sel && (s.runtime.transport.pausedElapsedMs || 0) > 0) {
-          s.runtime.transport.playing = true;
-          s.runtime.transport.playingSongId = sel;
-          s.runtime.transport.startedAt = now - s.runtime.transport.pausedElapsedMs;
-          s.runtime.transport.loopCount = 0;
-          s.runtime.transport.pendingNextAfterLoop = false;
-          s.runtime.transport.pausedSongId = null;
-          s.runtime.transport.pausedElapsedMs = 0;
-          s.ui.selectedSongId = sel;
-          s.ui.editorSongId = sel;
-          return;
-        }
+  setState(s => {
+    if (on && !wasPlaying) {
+      const ids = (s.data.setlist || []).map(nId);
+      const sel = nId(s.ui.selectedSongId || ids[0] || null);
 
-        // start da zero sulla selected
-        s.ui.selectedSongId = sel;
-        s.ui.editorSongId = sel;
+      // resume
+      if (s.runtime.transport.pausedSongId === sel && (s.runtime.transport.pausedElapsedMs || 0) > 0) {
         s.runtime.transport.playing = true;
         s.runtime.transport.playingSongId = sel;
-        s.runtime.transport.startedAt = now;
+        s.runtime.transport.startedAt = now - s.runtime.transport.pausedElapsedMs;
         s.runtime.transport.loopCount = 0;
         s.runtime.transport.pendingNextAfterLoop = false;
         s.runtime.transport.pausedSongId = null;
         s.runtime.transport.pausedElapsedMs = 0;
+        s.ui.selectedSongId = sel;
+        s.ui.editorSongId = sel;
         return;
       }
 
-      // pausa: salva posizione
-      if (!on && wasPlaying) {
-        const elapsed = Math.max(0, now - (s.runtime.transport.startedAt || 0));
-        s.runtime.transport.pausedSongId = s.runtime.transport.playingSongId;
-        s.runtime.transport.pausedElapsedMs = elapsed;
-        s.runtime.transport.playing = false;
-        s.runtime.transport.playingSongId = null;
-        s.runtime.transport.startedAt = 0;
-        s.runtime.transport.loopCount = 0;
-        s.runtime.transport.pendingNextAfterLoop = false;
-        return;
-      }
-      // stop già fermo → non fare nada
-    });
+      // start da zero
+      s.ui.selectedSongId = sel;
+      s.ui.editorSongId = sel;
+      s.runtime.transport.playing = true;
+      s.runtime.transport.playingSongId = sel;
+      s.runtime.transport.startedAt = now;
+      s.runtime.transport.loopCount = 0;
+      s.runtime.transport.pendingNextAfterLoop = false;
+      s.runtime.transport.pausedSongId = null;
+      s.runtime.transport.pausedElapsedMs = 0;
+      return;
+    }
 
-    btnPlay.textContent = on ? '⏸' : '▶︎';
-    highlightSelection();
-    highlightSelectionDOM();
-    highlightQueuedDOM();
-    updateProgressImmediate();
+    // ---- PAUSA: uso 'pausedForServer' calcolato PRIMA ----
+    if (!on && wasPlaying) {
+      s.runtime.transport.pausedSongId = s.runtime.transport.playingSongId;
+      s.runtime.transport.pausedElapsedMs = pausedForServer;
+      s.runtime.transport.playing = false;
+      s.runtime.transport.playingSongId = null;
+      s.runtime.transport.startedAt = 0;
+      s.runtime.transport.loopCount = 0;
+      s.runtime.transport.pendingNextAfterLoop = false;
+      return;
+    }
+  });
+
+  // Notifico il server con i valori catturati PRIMA del setState
+  if (origin === 'local') {
+    if (on) {
+      Realtime.send('transport/play');
+    } else {
+      Realtime.send('transport/pause', {
+        songId: prevSongId,
+        elapsedMs: Math.floor(pausedForServer),
+      });
+    }
   }
+
+  btnPlay.textContent = on ? '⏸' : '▶︎';
+  highlightSelection();
+  highlightSelectionDOM();
+  highlightQueuedDOM();
+  updateProgressImmediate();
+}
 
   function selectSongByDelta(delta, { keepPlayState = true } = {}) {
     const ids = (store.data.setlist || []).map(nId);
@@ -392,6 +425,10 @@ export function renderSetlist() {
         const ok = await modalConfirm(`Remove "${song.title}" from setlist?`);
         if (!ok) return;
         removeSong(id);
+        const ids = (store.data.setlist || []);
+        const songs = ids.map(i => store.data.songs[i]).filter(Boolean);
+        Realtime.send('state/setlist', { songs });
+
         softRefresh(); // aggiorna lista subito
       });
 
@@ -430,6 +467,9 @@ export function renderSetlist() {
             forceSelectNow(id);
             highlightSelection(); highlightSelectionDOM(); highlightQueuedDOM();
             updateProgressImmediate();
+            // sincronizza la selezione sul server (per ID)
+            Realtime.send('song/selectById', { id });
+
             return;
           }
 
@@ -442,6 +482,7 @@ export function renderSetlist() {
           });
           forceSelectNow(id);
           highlightSelection(); highlightSelectionDOM(); highlightQueuedDOM();
+          Realtime.send('transport/queueNext', { queuedSongId: id, mode: loopExit }); // << broadcast del blink+queue
           return;
         }
 
@@ -458,14 +499,19 @@ export function renderSetlist() {
         } else {
           if (pausedId && pausedId !== id) clearPauseState();
           updateProgressImmediate();
+          if (store.prefs?.setlist?.playOnClick) { btnPlay.click?.(); }
         }
 
         highlightSelection();
         highlightSelectionDOM();
         highlightQueuedDOM();
+        Realtime.send('song/selectById', { id });
+
       });
 
+      if (store.prefs?.setlist?.dblClickOpensEditor !== false) {
       item.addEventListener('dblclick', () => openEditor(id));
+      }
 
       body.appendChild(item);
       itemEls.set(nId(id), { item, progress });
@@ -476,10 +522,16 @@ const dnd = makeSortable(body, {
   itemSelector: '.song-item',
   handleSelector: '.drag-handle',
   isLocked, 
-  onReorder: (ids) => {
-    const next = ids.filter(id => id && store.data.songs[id]);
-    setState(s => { s.data.setlist = next; });
-  }
+onReorder: (ids) => {
+  // aggiorna localmente
+  const next = ids.filter(id => id && store.data.songs[id]);
+  setState(s => { s.data.setlist = next; });
+
+  // invia al server l’ordine come array di SONG objects
+  const songs = next.map(id => store.data.songs[id]).filter(Boolean);
+  Realtime.send('state/setlist', { songs });
+}
+
 });
 
 // Mantieni il disabled del DnD allineato ai cambi di lock
@@ -493,6 +545,7 @@ wrap.addEventListener('DOMNodeRemoved', (e) => {
     unsubDndLock?.();
     unsubLockClasses?.();
     dnd?.destroy?.();
+    window.removeEventListener('lyrix:queued-sync', onQueuedSync);
   }
 });
 
@@ -568,72 +621,133 @@ const unsubLockClasses = subscribe(() => applyLockClasses());
   }
 
   // ───────────────── Transport wiring ─────────────────
-  function onNextClick() {
-    if (store.ui.lock) return;
+function onNextClick() {
+  if (store.ui.lock) return;
 
-    const t = store.runtime.transport;
-    const playing = !!t.playing && !!t.playingSongId;
-    const currentId = nId(t.playingSongId || store.ui.selectedSongId);
-    const current = store.data.songs[currentId];
+  const t = store.runtime.transport;
+  const playing   = !!t.playing && !!t.playingSongId;
+  const currentId = nId(t.playingSongId || store.ui.selectedSongId);
+  const current   = store.data.songs[currentId];
 
-    if (!playing || !current || (current?.arranger?.mode !== 'LoopSection' && current?.arranger?.mode !== 'Loop')) {
-      const keep = store.runtime.transport.playing;
-      selectSongByDelta(+1, { keepPlayState: keep });
-      return;
-    }
+  // Caso standard (non in loop, o non playing): avanza e NOTIFICA il server
+  if (!playing || !current || (current?.arranger?.mode !== 'LoopSection' && current?.arranger?.mode !== 'Loop')) {
+    const keep = store.runtime.transport.playing;
+    selectSongByDelta(+1, { keepPlayState: keep });
+    Realtime.send('transport/next');   // <-- AGGIUNTO
+    return;
+  }
 
-    // Siamo in Loop: rispetta loopExit
-    const loopExit = getLoopExit(current);
-    const ids = (store.data.setlist || []).map(nId);
-    const baseIdx = Math.max(0, ids.indexOf(currentId));
-    const nextIdx = Math.max(0, Math.min(ids.length - 1, baseIdx + 1));
-    const nextId = ids[nextIdx];
+  // Siamo in Loop: rispetta loopExit
+  const loopExit = getLoopExit(current);
+  const ids = (store.data.setlist || []).map(nId);
+  const baseIdx = Math.max(0, ids.indexOf(currentId));
+  const nextIdx = Math.max(0, Math.min(ids.length - 1, baseIdx + 1));
+  const nextId = ids[nextIdx];
 
-    if (loopExit === 'instant') {
-      const keep = true;
-      setState(s => {
-        s.ui.selectedSongId = nextId;
-        s.ui.editorSongId = nextId;
-      });
-      forceSelectNow(nextId);
-      selectSongByDelta(+1, { keepPlayState: keep });
-      const now = performance.now();
-      setState(s => {
-        s.ui.selectedSongId = nextId;
-        s.ui.editorSongId = nextId;
-        s.runtime.transport.playingSongId = nextId;
-        s.runtime.transport.startedAt = now;
-        s.runtime.transport.loopCount = 0;
-        s.runtime.transport.pendingNextAfterLoop = false;
-        s.runtime.transport.queuedSongId = null;
-        s.runtime.transport.barSwitchAtMs = null;
-        s.runtime.transport.loopExitMode = 'instant';
-        s.runtime.transport.pausedSongId = null;
-        s.runtime.transport.pausedElapsedMs = 0;
-      });
-      forceSelectNow(nextId);
-      highlightSelection(); highlightSelectionDOM(); highlightQueuedDOM();
-      updateProgressImmediate();
-      return;    
-    }
-
-    // finish | bar → metti in coda e arma l'uscita (non switchare ora)
+  if (loopExit === 'instant') {
+    const keep = true;
     setState(s => {
-      s.runtime.transport.pendingNextAfterLoop = true;
-      s.runtime.transport.queuedSongId = nextId;
-      s.runtime.transport.loopExitMode = loopExit;
       s.ui.selectedSongId = nextId;
-      s.ui.editorSongId = nextId;
+      s.ui.editorSongId   = nextId;
+    });
+    forceSelectNow(nextId);
+    selectSongByDelta(+1, { keepPlayState: keep });
+
+    const now = performance.now();
+    setState(s => {
+      s.ui.selectedSongId = nextId;
+      s.ui.editorSongId   = nextId;
+      s.runtime.transport.playingSongId = nextId;
+      s.runtime.transport.startedAt     = now;
+      s.runtime.transport.loopCount     = 0;
+      s.runtime.transport.pendingNextAfterLoop = false;
+      s.runtime.transport.queuedSongId  = null;
+      s.runtime.transport.barSwitchAtMs = null;
+      s.runtime.transport.loopExitMode  = 'instant';
+      s.runtime.transport.pausedSongId  = null;
+      s.runtime.transport.pausedElapsedMs = 0;
     });
     forceSelectNow(nextId);
     highlightSelection(); highlightSelectionDOM(); highlightQueuedDOM();
+    updateProgressImmediate();
+
+    Realtime.send('transport/next');
+    return;
   }
 
-  function onPrevClick() {
-    if (store.ui.lock) return;
+  // finish | bar → metti in coda, arma l'uscita e NOTIFICA il server
+  setState(s => {
+    s.runtime.transport.pendingNextAfterLoop = true;
+    s.runtime.transport.queuedSongId = nextId;
+    s.runtime.transport.loopExitMode = loopExit;
+    s.ui.selectedSongId = nextId;
+    s.ui.editorSongId   = nextId;
+  });
+  forceSelectNow(nextId);
+  highlightSelection(); highlightSelectionDOM(); highlightQueuedDOM();
+
+  Realtime.send('transport/queueNext', { queuedSongId: nextId, mode: loopExit });
+}
+
+function onPrevClick() {
+  if (store.ui.lock) return;
+
+  const t = store.runtime.transport;
+  const playing   = !!t.playing && !!t.playingSongId;
+  const currentId = nId(t.playingSongId || store.ui.selectedSongId);
+  const current   = store.data.songs[currentId];
+
+  // Se non stiamo suonando o non è LoopSection → prev immediato
+  if (!playing || !current || (current?.arranger?.mode !== 'LoopSection' && current?.arranger?.mode !== 'Loop')) {
     const keep = store.runtime.transport.playing;
     selectSongByDelta(-1, { keepPlayState: keep });
+    Realtime.send('transport/prev');
+    return;
   }
+
+  // Siamo in Loop: rispetta loopExit
+  const loopExit = getLoopExit(current);
+  const ids = (store.data.setlist || []).map(nId);
+  const baseIdx = Math.max(0, ids.indexOf(currentId));
+  const prevIdx = Math.max(0, Math.min(ids.length - 1, baseIdx - 1));
+  const prevId = ids[prevIdx];
+
+  if (loopExit === 'instant') {
+    // cambio immediato al precedente
+    setState(s => {
+      s.ui.selectedSongId = prevId;
+      s.ui.editorSongId   = prevId;
+      s.runtime.transport.playingSongId = prevId;
+      s.runtime.transport.startedAt     = performance.now();
+      s.runtime.transport.loopCount     = 0;
+      s.runtime.transport.pendingNextAfterLoop = false;
+      s.runtime.transport.queuedSongId  = null;
+      s.runtime.transport.barSwitchAtMs = null;
+      s.runtime.transport.loopExitMode  = 'instant';
+      s.runtime.transport.pausedSongId  = null;
+      s.runtime.transport.pausedElapsedMs = 0;
+    });
+    forceSelectNow(prevId);
+    highlightSelection(); highlightSelectionDOM(); highlightQueuedDOM();
+    updateProgressImmediate();
+
+    Realtime.send('transport/prev');
+    return;
+  }
+
+  // finish | bar → metti in coda il precedente e NOTIFICA il server
+  setState(s => {
+    s.runtime.transport.pendingNextAfterLoop = true;
+    s.runtime.transport.queuedSongId = prevId;
+    s.runtime.transport.loopExitMode = loopExit;
+    s.ui.selectedSongId = prevId;
+    s.ui.editorSongId   = prevId;
+  });
+  forceSelectNow(prevId);
+  highlightSelection(); highlightSelectionDOM(); highlightQueuedDOM();
+
+  Realtime.send('transport/queueNext', { queuedSongId: prevId, mode: loopExit });
+}
 
   btnPrev?.addEventListener('click', onPrevClick);
   btnNext?.addEventListener('click', onNextClick);
@@ -644,7 +758,9 @@ const unsubLockClasses = subscribe(() => applyLockClasses());
   btnStop?.addEventListener('click', () => {
     if (store.ui.lock) return;
     hardStop();
+    Realtime.send('transport/stop');
   });
+
 
   // Disabilita transport in lock SUBITO e poi reattivo
   const applyLockToTransport = () => {
@@ -661,6 +777,27 @@ const unsubLockClasses = subscribe(() => applyLockClasses());
     setPlaying(!store.runtime.transport.playing);
   };
   window.addEventListener('lyrix:togglePlay', window.__lyrixPlayHandler);
+
+  if (window.__lyrixPlayRemote) window.removeEventListener('lyrix:play-remote', window.__lyrixPlayRemote);
+  window.__lyrixPlayRemote = () => {
+    if (store.ui.lock) return;
+    btnPlay.textContent = '⏸';
+    highlightSelectionDOM();
+    highlightQueuedDOM();
+    updateProgressImmediate(); // parte l’animazione usando startedAt mappato da ws.js
+  };
+    window.addEventListener('lyrix:play-remote', window.__lyrixPlayRemote);
+
+    if (window.__lyrixStopRemote) window.removeEventListener('lyrix:stop-remote', window.__lyrixStopRemote);
+    window.__lyrixStopRemote = () => {
+      if (store.ui.lock) return;
+      btnPlay.textContent = '▶︎';
+      highlightSelectionDOM();
+      highlightQueuedDOM();
+      updateProgressImmediate(); // reset visivo; i non-correnti vengono azzerati nel loop
+    };
+    window.addEventListener('lyrix:stop-remote', window.__lyrixStopRemote);
+
 
   if (window.__lyrixNavHandler) window.removeEventListener('lyrix:navigateSong', window.__lyrixNavHandler);
   window.__lyrixNavHandler = (ev) => {
@@ -756,6 +893,7 @@ const unsubLockClasses = subscribe(() => applyLockClasses());
           setState(s => { s.ui.selectedSongId = qid; s.ui.editorSongId = qid; });
           highlightSelection(); highlightSelectionDOM(); highlightQueuedDOM();
           updateProgressImmediate();
+          Realtime.send('song/selectById', { id: qid }); // << allinea playingSongId/startedAt su TUTTI
           return;
         }
       }
@@ -857,6 +995,7 @@ const unsubLockClasses = subscribe(() => applyLockClasses());
           setState(s => { s.ui.selectedSongId = qid; s.ui.editorSongId = qid; });
           highlightSelection(); highlightSelectionDOM(); highlightQueuedDOM();
           updateProgressImmediate();
+          Realtime.send('song/selectById', { id: qid }); // << sincronizza il cambio su tutti
           return;
         }
 
@@ -872,6 +1011,7 @@ const unsubLockClasses = subscribe(() => applyLockClasses());
         });
         highlightSelection(); highlightSelectionDOM(); highlightQueuedDOM();
         updateProgressImmediate();
+        Realtime.send('transport/next')
         return;
       }
 
@@ -914,6 +1054,7 @@ const unsubLockClasses = subscribe(() => applyLockClasses());
         highlightSelection();
         highlightSelectionDOM();
         highlightQueuedDOM();
+        Realtime.send('song/selectById', { id: nextId }); // << allinea il server alla prossima
       } else {
         hardStop();
       }
@@ -943,6 +1084,10 @@ header.querySelector('#btn-add-song')?.addEventListener('click', () => {
     chords: [{ chord: "[Verse 1]" }, { chord: "" }, { chord: "[Chorus]" }],
     arranger: { mode: 'JumpToNext', repeats: 1, loopExit: 'finish' }
   });
+  const ids = (store.data.setlist || []);
+  const songs = ids.map(id => store.data.songs[id]).filter(Boolean);
+  Realtime.send('state/setlist', { songs });
+
   openEditor(newId); // apre subito l’editor sul nuovo brano
 });
 
@@ -972,9 +1117,23 @@ function handleImport(kind) {
         if (kind === 'song' || (json.schema || '').startsWith('lyrix-song')) {
           importSongJSON(json);
           softRefresh();
+          const ids = (store.data.setlist || []);
+          const songs = ids.map(i => store.data.songs[i]).filter(Boolean);
+          Realtime.send('state/setlist', { songs });
+
         } else {
           importSetlistJSON(json, { mode: 'replace' });
           softRefresh();
+          // se il tuo export è un "session" con songs array, usa loadSession:
+          if (json && Array.isArray(json.songs)) {
+            Realtime.send('state/loadSession', { session: json });
+          } else {
+            const ids = (store.data.setlist || []);
+            const songs = ids.map(i => store.data.songs[i]).filter(Boolean);
+            Realtime.send('state/setlist', { songs });
+          }
+
+
         }
       } catch (e) {
         await modalAlert('Invalid JSON file');
@@ -1026,6 +1185,11 @@ function softRefresh() {
       if (window.__lyrixNavHandler) window.removeEventListener('lyrix:navigateSong', window.__lyrixNavHandler);
       window.__lyrixPlayHandler = null;
       window.__lyrixNavHandler = null;
+      if (window.__lyrixPlayRemote) window.removeEventListener('lyrix:play-remote', window.__lyrixPlayRemote);
+      if (window.__lyrixStopRemote) window.removeEventListener('lyrix:stop-remote', window.__lyrixStopRemote);
+      window.__lyrixPlayRemote = null;
+      window.__lyrixStopRemote = null;
+
     }
   });
 

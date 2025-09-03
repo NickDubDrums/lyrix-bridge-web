@@ -1,102 +1,249 @@
-
 // web/js/pages/settings.js
-import { store, setState, subscribe } from '../state/store.js';
+// Settings page: user-customizable experience
+// - Performance block: colors and sizes for performance view
+// - Setlist block: behavior toggles
+// - Export / Import / Reset defaults (with confirm modal)
+import { store, setState } from '../state/store.js';
+import { savePersisted, loadPersisted, clearPersisted } from '../state/persistence.js';
+import { modalConfirm, modalAlert } from '../ui/modals.js';
 
-function getPerfPrefs() {
-  const p = store.prefs?.performance || {};
-  return {
-    lyricsSize: p.lyricsSize ?? 42,
-    chordsSize: p.chordsSize ?? 28,
-    textColor: p.textColor ?? '#f2f2f2',
-    currentColor: p.currentColor ?? '#ffffff',
-    bgColor: p.bgColor ?? '#101014',
-    lineGap: p.lineGap ?? 10,
-    splitRatio: p.splitRatio ?? 50,
-    splitEnabled: p.splitEnabled ?? true,
+// ---- Defaults (edit with care) ---------------------------------------------
+import { DEFAULT_PREFS } from '../state/defaults.js';
+
+
+// ---- Helper: deep merge -----------------------------------------------------
+function deepMerge(base, add) {
+  const out = Array.isArray(base) ? base.slice() : { ...base };
+  if (add && typeof add === 'object') {
+    for (const [k, v] of Object.entries(add)) {
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        out[k] = deepMerge(base?.[k] ?? {}, v);
+      } else {
+        out[k] = v;
+      }
+    }
+  }
+  return out;
+}
+
+function getPrefs() {
+  return deepMerge(DEFAULT_PREFS, store.prefs || {});
+}
+
+// ---- Apply CSS vars consumed by Performance view ---------------------------
+// These variables should be read by performance.css / performance.js
+function applyPerfVars(target=document.documentElement) {
+  const p = getPrefs().performance;
+  const set = (name, val) => target.style.setProperty(name, val);
+
+  set('--perf-stage-bg', p.stageBg);
+  set('--perf-line-fg', p.lineColor);
+  set('--perf-current-fg', p.currentLineColor);
+  set('--perf-section-fg', p.sectionColor);
+  set('--perf-title-fg', p.titleColor);
+
+  set('--perf-line-scale', String(p.lineSizePct));
+  set('--perf-current-scale', String(p.currentLineSizePct));
+  set('--perf-section-scale', String(p.sectionSizePct));
+  set('--perf-title-scale', String(p.titleSizePct));
+}
+
+// ---- UI builders ------------------------------------------------------------
+function fieldNumber(id, label, min, max, step, value, suffix='%') {
+  return `
+    <div class="field">
+      <label for="${id}">${label}</label>
+      <input type="number" id="${id}" min="${min}" max="${max}" step="${step}" value="${value}" inputmode="numeric">
+      <span class="suffix">${suffix}</span>
+    </div>`;
+}
+function fieldColor(id, label, value) {
+  return `
+    <div class="field">
+      <label for="${id}">${label}</label>
+      <input type="color" id="${id}" value="${value}">
+      <input type="text" id="${id}-hex" value="${value}" pattern="^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})$" />
+    </div>`;
+}
+function fieldToggle(id, label, checked) {
+  return `
+    <div class="field toggle">
+      <label for="${id}">${label}</label>
+      <input type="checkbox" id="${id}" ${checked ? 'checked' : ''}>
+    </div>`;
+}
+
+// ---- Export / Import helpers -----------------------------------------------
+function exportPrefs(prefs) {
+  const blob = new Blob([JSON.stringify({ prefs }, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'lyrix-settings.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function importPrefsFromFile(file, onDone) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const json = JSON.parse(String(reader.result || '{}'));
+      const next = deepMerge(DEFAULT_PREFS, json?.prefs || {});
+      onDone(next);
+    } catch (e) {
+      console.warn('Invalid settings file', e);
+      modalAlert('Import failed', 'Il file selezionato non contiene impostazioni valide.');
+    }
   };
+  reader.readAsText(file);
 }
 
-function applyPerfVars(node) {
-  const p = getPerfPrefs();
-  node.style.setProperty('--lyrics-size', p.lyricsSize + 'px');
-  node.style.setProperty('--chords-size', p.chordsSize + 'px');
-  node.style.setProperty('--perf-fg', p.textColor);
-  node.style.setProperty('--current-fg', p.currentColor);
-  node.style.setProperty('--perf-bg', p.bgColor);
-  node.style.setProperty('--line-gap', p.lineGap + 'px');
-  node.style.setProperty('--perf-left', p.splitRatio + 'fr');
-  node.style.setProperty('--perf-right', (100 - p.splitRatio) + 'fr');
-}
-
+// ---- Render -----------------------------------------------------------------
 export function renderSettings() {
   const el = document.createElement('section');
   el.className = 'view view-settings';
+
+  const prefs = getPrefs();
+  const P = prefs.performance;
+  const S = prefs.setlist;
+
   el.innerHTML = `
-    <header class="view-header">
+    <header class="page-header">
       <h2>Settings</h2>
-      <div class="spacer"></div>
     </header>
+
     <div class="settings-grid">
-      <div class="settings-card">
-        <label>Lyrics size (px)</label>
-        <input type="number" id="set-lyrics" min="18" max="120" step="1">
-        <label>Chords size (px)</label>
-        <input type="number" id="set-chords" min="12" max="96" step="1">
-        <label>Line gap (px)</label>
-        <input type="number" id="set-linegap" min="0" max="64" step="1">
-      </div>
-      <div class="settings-card">
-        <label>Text color</label>
-        <input type="color" id="set-text">
-        <label>Current line color</label>
-        <input type="color" id="set-current">
-        <label>Background color</label>
-        <input type="color" id="set-bg">
-      </div>
-      <div class="settings-card">
-        <label>Split screen enabled</label>
-        <input type="checkbox" id="set-split">
-        <label>Split ratio (lyrics | chords)</label>
-        <input type="range" id="set-splitratio" min="10" max="90" step="1">
-      </div>
+      <section class="card">
+        <h3>Performance</h3>
+        ${fieldColor('stageBg', 'Stage background', P.stageBg)}
+        ${fieldColor('lineColor', 'Text color (lines)', P.lineColor)}
+        ${fieldColor('currentLineColor', 'Text color (current line)', P.currentLineColor)}
+        ${fieldColor('sectionColor', 'Section indicator color', P.sectionColor)}
+        ${fieldColor('titleColor', 'Performance title color', P.titleColor)}
+
+        ${fieldNumber('currentLineSizePct', 'Current line size', 50, 200, 1, P.currentLineSizePct)}
+        ${fieldNumber('lineSizePct', 'Lines size', 50, 200, 1, P.lineSizePct)}
+        ${fieldNumber('sectionSizePct', 'Section indicator size', 50, 200, 1, P.sectionSizePct)}
+        ${fieldNumber('titleSizePct', 'Performance title size', 50, 200, 1, P.titleSizePct)}
+      </section>
+
+      <section class="card">
+        <h3>Setlist</h3>
+        ${fieldToggle('playOnClick', 'Play on click (se in pausa)', S.playOnClick)}
+        ${fieldToggle('dblClickOpensEditor', 'Doppio click apre l’editor', S.dblClickOpensEditor)}
+        ${fieldToggle('lockOnStart', 'Avvia in Lock mode', S.lockOnStart)}
+      </section>
+
+      <section class="card">
+        <h3>Export / Reset</h3>
+        <div class="field row">
+          <button id="btnExport" class="btn">Export settings</button>
+          <label class="btn">
+            Import settings
+            <input type="file" id="fileImport" accept="application/json" hidden>
+          </label>
+          <button id="btnReset" class="btn danger">Reset to defaults…</button>
+        </div>
+      </section>
     </div>
   `;
 
-  const $ = sel => el.querySelector(sel);
-  const cur = getPerfPrefs();
-  $('#set-lyrics').value = cur.lyricsSize;
-  $('#set-chords').value = cur.chordsSize;
-  $('#set-linegap').value = cur.lineGap;
-  $('#set-text').value = cur.textColor;
-  $('#set-current').value = cur.currentColor;
-  $('#set-bg').value = cur.bgColor;
-  $('#set-split').checked = !!cur.splitEnabled;
-  $('#set-splitratio').value = cur.splitRatio;
+// Accetta sia 'btnExport' che '#btnExport'
+const $ = (sel) => el.querySelector(sel.startsWith('#') ? sel : '#' + sel);
 
-  el.addEventListener('input', (e) => {
-    const t = e.target;
-    setState(s => {
-      const p = s.prefs.performance ?? (s.prefs.performance = {});
-      if (t.id === 'set-lyrics') p.lyricsSize = Number(t.value);
-      if (t.id === 'set-chords') p.chordsSize = Number(t.value);
-      if (t.id === 'set-linegap') p.lineGap = Number(t.value);
-      if (t.id === 'set-text') p.textColor = t.value;
-      if (t.id === 'set-current') p.currentColor = t.value;
-      if (t.id === 'set-bg') p.bgColor = t.value;
-      if (t.id === 'set-split') p.splitEnabled = t.checked;
-      if (t.id === 'set-splitratio') p.splitRatio = Number(t.value);
+  // keep hex input in sync with color input
+  const bindColor = (baseId, path) => {
+    const color = $(baseId);
+    const hex = $(`${baseId}-hex`);
+    const sync = (val) => { if (hex) hex.value = val; };
+    if (color && hex) {
+      color.addEventListener('input', () => {
+        sync(color.value);
+        setState(s => {
+          s.prefs = deepMerge(s.prefs || {}, { performance: { [path]: color.value } });
+        });
+        applyPerfVars();
+      });
+      hex.addEventListener('change', () => {
+        const v = hex.value;
+        if (/^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})$/.test(v)) {
+          color.value = v;
+          setState(s => {
+            s.prefs = deepMerge(s.prefs || {}, { performance: { [path]: v } });
+          });
+          applyPerfVars();
+        }
+      });
+    }
+    if (color) sync(color.value);
+  };
+
+  bindColor('stageBg', 'stageBg');
+  bindColor('lineColor', 'lineColor');
+  bindColor('currentLineColor', 'currentLineColor');
+  bindColor('sectionColor', 'sectionColor');
+  bindColor('titleColor', 'titleColor');
+
+  const numBind = (id, path) => {
+    const input = $(id);
+    if (!input) return;
+    input.addEventListener('input', () => {
+      const n = Number(input.value);
+      if (!Number.isFinite(n)) return;
+      setState(s => { s.prefs = deepMerge(s.prefs || {}, { performance: { [path]: Math.max(50, Math.min(200, n)) } }); });
+      applyPerfVars();
+    });
+  };
+  numBind('currentLineSizePct', 'currentLineSizePct');
+  numBind('lineSizePct', 'lineSizePct');
+  numBind('sectionSizePct', 'sectionSizePct');
+  numBind('titleSizePct', 'titleSizePct');
+
+  const toggleBind = (id, path) => {
+    const input = $(id);
+    if (!input) return;
+    input.addEventListener('change', () => {
+      setState(s => {
+        s.prefs = deepMerge(s.prefs || {}, { setlist: { [path]: !!input.checked } });
+      });
+    });
+  };
+  toggleBind('playOnClick', 'playOnClick');
+  toggleBind('dblClickOpensEditor', 'dblClickOpensEditor');
+  toggleBind('lockOnStart', 'lockOnStart');
+
+  // Export
+  $('#btnExport')?.addEventListener('click', () => {
+    const current = getPrefs();
+    exportPrefs(current);
+  });
+
+  // Import
+  $('#fileImport')?.addEventListener('change', (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    importPrefsFromFile(f, (next) => {
+      setState(s => { s.prefs = next; });
+      applyPerfVars();
+      savePersisted(store); // persist entire store with new prefs
+      modalAlert('Import completato', 'Impostazioni importate correttamente.');
     });
   });
 
-  const unsub = subscribe((s) => {
-    // mirror CSS custom props on <body> so Performance picks them up too
-    applyPerfVars(document.body);
+  // Reset
+  $('#btnReset')?.addEventListener('click', async () => {
+    const ok = await modalConfirm('Ripristina default', 'Vuoi davvero ripristinare tutte le impostazioni ai valori di default?');
+    if (!ok) return;
+    setState(s => { s.prefs = DEFAULT_PREFS; });
+    applyPerfVars();
+    savePersisted(store);
   });
-  applyPerfVars(document.body);
 
-  el.addEventListener('DOMNodeRemoved', (e) => {
-    if (e.target === el) unsub();
-  });
+  // Apply initial CSS vars on mount
+  applyPerfVars();
 
   return el;
 }

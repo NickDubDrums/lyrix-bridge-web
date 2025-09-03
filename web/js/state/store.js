@@ -251,3 +251,16 @@ export function importSetlistJSON(obj, opts = {}) {
     console.warn('Hydrate error', e);
   }
 })();
+
+
+import { DEFAULT_PREFS } from '../state/defaults.js';
+
+
+(function bootPrefs() {
+  // merge defaults
+  setState(s => { s.prefs = Object.assign({}, DEFAULT_PREFS, s.prefs || {}); });
+  // apply lock-on-start
+  if (store.prefs?.setlist?.lockOnStart) {
+    setState(s => { s.ui.lock = true; });
+  }
+})();

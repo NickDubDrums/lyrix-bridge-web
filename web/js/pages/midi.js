@@ -91,3 +91,12 @@ function onMIDIMessage(e) {
     if (cc === MIDI_CFG.chords.ccB) setChordsLine(val + 129);       // 129..256
   }
 }
+
+
+export function renderMIDI(){
+  const el = document.createElement('section');
+  el.className = 'view view-midi';
+  el.innerHTML = `<header class="page-header"><h2>MIDI</h2></header>
+  <p>Legenda comandi MIDI/OSC (to-do): questa pagina mostrerà i mapping e un tester live.</p>`;
+  return el;
+}

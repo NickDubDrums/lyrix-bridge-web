@@ -1,10 +1,14 @@
 import { store, setState } from './state/store.js';
 import { renderSetlist } from './pages/setlist.js';
 import { renderPerformance } from './pages/performance.js';
+import { renderSettings } from './pages/settings.js';
+import { renderMIDI } from './pages/midi.js';
 
 const routes = {
   '#/setlist': renderSetlist,
   '#/performance': renderPerformance,
+  '#/settings': renderSettings,
+  '#/midi': renderMIDI,
 };
 
 export function navigate(hash) {

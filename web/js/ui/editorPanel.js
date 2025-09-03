@@ -1,4 +1,6 @@
 import { store, setState, subscribe, exportSongJSON } from '../state/store.js';
+import { Realtime } from '../state/ws.js';
+
 
 
 const RE_SECTION = /^\s*\[([^\]]+)\]\s*$/;
@@ -462,17 +464,80 @@ $btnExport.addEventListener('click', () => {
   }
 
   // --- Eventi ---------------------------------------------------------------
-  $btnSave.addEventListener('click', () => {
-    saveSong();
-     window.dispatchEvent(new HashChangeEvent('hashchange'));
-    $btnSave.textContent = 'Saved ✓';
-    setTimeout(() => $btnSave.textContent = 'Save Song', 900);
+$btnSave.addEventListener('click', () => {
+  // 1) Aggiorna lo stato locale del brano (UI istantanea)
+  saveSong();
+
+  // 2) Seleziona il brano in editing lato server,
+  //    così 'editor/apply' agisce sul brano giusto
+  Realtime.send('song/selectById', { id: song.id });
+
+  // 3) Metadati
+  const durationSec = parseDurationToSec($metaDur.value);
+  Realtime.send('song/updateMeta', {
+    id:     song.id,
+    title:  $metaTitle.value.trim(),
+    artist: $metaArtist.value.trim(),
+    bpm:    $metaBpm.value ? Number($metaBpm.value) : undefined,
+    key:    $metaKey.value.trim(),
+    duration: Number.isFinite(durationSec) ? durationSec : song.duration
   });
-  $btnClose.addEventListener('click', () => {
-    saveSong();
-    setState(s => { s.ui.editorOpen = false; s.ui.editorSongId = null; });
-    location.hash = '#/setlist';
+
+  // 4) Behavior / Arranger
+  const rep = Math.max(1, parseInt($metaRepeats.value || '1', 10));
+  const settings = { arranger: { mode: $metaBehavior.value, repeats: rep } };
+  if ($metaBehavior.value === 'LoopSection') {
+    settings.arranger.loopExit = ($metaLoopExit.value || 'finish').toLowerCase();
+  }
+  Realtime.send('song/updateSettings', { id: song.id, settings });
+
+  // 5) Testi (Lyrics + Chords)
+  Realtime.send('editor/apply', {
+    lyricsText: $taL.value,
+    chordsText: $taC.value
   });
+
+  // 6) Feedback UI
+  $btnSave.textContent = 'Saved ✓';
+  setTimeout(() => $btnSave.textContent = 'Save Song', 900);
+  // (facoltativo) aggiornare subito la lista visiva se necessario:
+  window.dispatchEvent(new HashChangeEvent('hashchange'));
+});
+
+$btnClose.addEventListener('click', () => {
+  // Per non perdere modifiche quando si chiude direttamente:
+  saveSong();
+
+  // Ripetiamo l’invio veloce (come in Save)
+  Realtime.send('song/selectById', { id: song.id });
+
+  const durationSec = parseDurationToSec($metaDur.value);
+  Realtime.send('song/updateMeta', {
+    id:     song.id,
+    title:  $metaTitle.value.trim(),
+    artist: $metaArtist.value.trim(),
+    bpm:    $metaBpm.value ? Number($metaBpm.value) : undefined,
+    key:    $metaKey.value.trim(),
+    duration: Number.isFinite(durationSec) ? durationSec : song.duration
+  });
+
+  const rep = Math.max(1, parseInt($metaRepeats.value || '1', 10));
+  const settings = { arranger: { mode: $metaBehavior.value, repeats: rep } };
+  if ($metaBehavior.value === 'LoopSection') {
+    settings.arranger.loopExit = ($metaLoopExit.value || 'finish').toLowerCase();
+  }
+  Realtime.send('song/updateSettings', { id: song.id, settings });
+
+  Realtime.send('editor/apply', {
+    lyricsText: $taL.value,
+    chordsText: $taC.value
+  });
+
+  // Chiudi editor
+  setState(s => { s.ui.editorOpen = false; s.ui.editorSongId = null; });
+  location.hash = '#/setlist';
+});
+
 
   // Lyrics prev/next
   $lyrPrev.addEventListener('click', () => {

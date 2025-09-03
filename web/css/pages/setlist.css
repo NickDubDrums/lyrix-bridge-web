@@ -218,6 +218,10 @@
   box-shadow: inset 0 0 0 1px rgba(86,132,255,0.25);
 }
 
+.song-progress { z-index: 1; }
+.song-item.queued::after { z-index: 2; }
+
+
 /* Badge behavior */
 .behavior-badge {
   font-size: 12px;

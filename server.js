@@ -42,6 +42,16 @@ const state = {
   currentSong: null,
   currentLyricIndex: 0,
   currentChordIndex: 0,
+  transport: { 
+    playing: false, 
+    playingSongId: null, 
+    startedAt: 0, 
+    pausedSongId: null, 
+    pausedElapsedMs: 0,
+    pendingNextAfterLoop: false,
+    queuedSongId: null,
+    loopExitMode: null, // 'finish' | 'bar' | 'instant'
+   },
   settings: {
     detectChordsLive: false,
     activeLane: 'lyrics',
@@ -51,6 +61,7 @@ const state = {
 
 // WebSocket server (lo dichiariamo qui per usarlo nei helper “safe”)
 let wss = null;
+
 
 // =======================
 // (OPZIONALE) MIDI & OSC – disattivati se i pacchetti non ci sono
@@ -84,45 +95,65 @@ function sendCC(controller, value = 127, channel = 0) {
 // =======================
 // Helper di stato
 // =======================
-const clamp = (i, len) => Math.max(0, Math.min(len - 1, i));
-
-function broadcastState() {
-  // SAFE: se wss ancora non c’è, non inviamo nulla
-  if (!wss) return;
-  const payload = JSON.stringify({ type: 'state', state });
-  wss.clients.forEach((c) => c.readyState === 1 && c.send(payload));
+function makeStateForClients() {
+  return {
+    setlist: state.setlist || [],
+    currentSongId: state.currentSongId || null,
+    transport: state.transport || { playing: false },
+    settings: state.settings || {},
+    lastEvent: state.lastEvent || '',
+  };
+}
+function broadcastState(targetWs = null) {
+  if (!wss && !targetWs) return;
+  const frame = { type: 'state', serverTime: Date.now(), state: makeStateForClients() };
+  const payload = JSON.stringify(frame);
+  if (targetWs) {
+    if (targetWs.readyState === 1) targetWs.send(payload);
+    return;
+  }
+  wss.clients.forEach(c => { if (c.readyState === 1) c.send(payload); });
 }
 
+function idxById(id) {
+  return Array.isArray(state.setlist) ? state.setlist.findIndex(s => s && s.id === id) : -1;
+}
 function selectSongByIndex(i) {
   if (!Array.isArray(state.setlist) || state.setlist.length === 0) return;
-  const idx = Math.max(0, Math.min(state.setlist.length - 1, i));
+  const idx = Math.max(0, Math.min(state.setlist.length - 1, i|0));
   const song = state.setlist[idx];
   if (!song) return;
 
   state.currentSongId = song.id;
-  state.currentSong = song;
+  state.currentSong   = song;
   state.currentLyricIndex = 0;
   state.currentChordIndex = 0;
 
-  // PC opzionale (funziona solo se MIDI presente)
+  // Program Change opzionale (se MIDI attivo)
   const pc = Number(song.programChange ?? (idx + 1)) - 1;
   sendPC(pc);
 
-  console.log('[STATE] Selected song:', song.title, `(idx ${idx})`);
   broadcastState();
 }
+function selectSongById(id) {
+  const i = idxById(id);
+  if (i >= 0) selectSongByIndex(i);
+}
+function selectNext() {
+  if (!Array.isArray(state.setlist) || !state.setlist.length) return;
+  const ids = state.setlist.map(s => s.id);
+  const cur = state.currentSongId ?? ids[0];
+  const i   = Math.max(0, ids.indexOf(cur));
+  selectSongByIndex(Math.min(ids.length - 1, i + 1));
+}
+function selectPrev() {
+  if (!Array.isArray(state.setlist) || !state.setlist.length) return;
+  const ids = state.setlist.map(s => s.id);
+  const cur = state.currentSongId ?? ids[0];
+  const i   = Math.max(0, ids.indexOf(cur));
+  selectSongByIndex(Math.max(0, i - 1));
+}
 
-function idxById(id) {
-  return Array.isArray(state.setlist) ? state.setlist.findIndex((s) => s.id === id) : -1;
-}
-function prevSong() {
-  const i = idxById(state.currentSongId);
-  selectSongByIndex(i <= 0 ? 0 : i - 1);
-}
-function nextSong() {
-  const i = idxById(state.currentSongId);
-  selectSongByIndex(i < 0 ? 0 : Math.min(state.setlist.length - 1, i + 1));
-}
 
 // Lyrics
 function selectLyricByIndex(i) {
@@ -162,42 +193,8 @@ function chordsNext() {
 
 // Demo se vuoto
 function ensureDemoSession() {
-  const hasList = Array.isArray(state.setlist) && state.setlist.length > 0;
-  if (hasList) return;
-
-  const demo = {
-    id: 'demo-001',
-    title: 'Lyrix Demo',
-    songs: [
-      {
-        id: 'song-001',
-        title: 'Brano Demo',
-        programChange: 1,
-        lyrics: [
-          { text: 'Odio tante cose da...' },
-          { text: 'quando ti conosco' },
-          { text: 'ma poi ti penso e...' },
-          { text: 'non ci capisco più' }
-        ],
-        chords: [
-          { chord: 'Em' }, { chord: 'D' }, { chord: 'G' }, { chord: 'C' },
-          { chord: 'Em' }, { chord: 'D' }, { chord: 'G' }, { chord: 'C' }
-        ]
-      },
-      {
-        id: 'song-002',
-        title: 'Secondo Brano',
-        programChange: 2,
-        lyrics: [ { text:'Prima strofa' }, { text:'Ritornello' }, { text:'Bridge' } ],
-        chords: [ { chord:'Am' }, { chord:'F' }, { chord:'C' }, { chord:'G' } ]
-      }
-    ]
-  };
-
-  state.session = demo;
-  state.setlist = demo.songs;
-  selectSongByIndex(0);
-  state.lastEvent = 'Demo session loaded';
+  // DEMO DISABILITATA: volontariamente vuota per evitare sovrascritture
+  return;
 }
 
 // =======================
@@ -213,7 +210,7 @@ wss.on('connection', (ws) => {
   ensureDemoSession();
 
   // Invia subito lo stato
-  ws.send(JSON.stringify({ type: 'state', state }));
+  broadcastState(ws);
 
   ws.on('message', (buf) => {
     let msg = null;
@@ -247,10 +244,86 @@ function parseChordsWithSections(raw) {
 
     const t = msg.type;
     switch (t) {
+
+      // ===== Salvataggio impostazioni editor =====
+case 'song/updateSettings': {
+  const { id, settings } = msg;
+  if (!id || typeof settings !== 'object') break;
+
+  const i = state.setlist.findIndex(s => s && s.id === id);
+  if (i < 0) break;
+
+  const allowed = { arranger: {} };
+
+  // arranger.mode: i tuoi valori reali (UI)
+  const mode = settings.arranger?.mode;
+  if (typeof mode === 'string' && ['JumpToNext','StopAtEnd','LoopSection'].includes(mode)) {
+    allowed.arranger.mode = mode;
+  }
+
+  // arranger.repeats (>=1)
+  const reps = Number(settings.arranger?.repeats);
+  if (Number.isFinite(reps) && reps > 0) {
+    allowed.arranger.repeats = reps | 0;
+  }
+
+  // arranger.loopExit: normalizza in minuscolo
+  if (settings.arranger && 'loopExit' in settings.arranger) {
+    const le = String(settings.arranger.loopExit || '').toLowerCase();
+    if (['finish','bar','instant'].includes(le)) {
+      allowed.arranger.loopExit = le;
+    }
+  }
+
+  const old = state.setlist[i] || {};
+  state.setlist[i] = {
+    ...old,
+    arranger: { ...(old.arranger || {}), ...(allowed.arranger || {}) },
+  };
+
+  state.lastEvent = 'Song settings saved';
+  broadcastState();
+  break;
+}
+
+case 'song/updateMeta': {
+  const { id, title, artist, bpm, key, duration } = msg;
+  const i = state.setlist.findIndex(s => s && s.id === id);
+  if (i < 0) break;
+
+  const old = state.setlist[i] || {};
+  const next = { ...old };
+
+  if (typeof title === 'string')  next.title  = title.trim();
+  if (typeof artist === 'string') next.artist = artist.trim();
+  if (typeof key === 'string')    next.key    = key.trim();
+  if (Number.isFinite(Number(bpm)))      next.bpm = Number(bpm);
+  if (Number.isFinite(Number(duration))) next.duration = Number(duration);
+
+  state.setlist[i] = next;
+  state.lastEvent = 'Song meta saved';
+  broadcastState();
+  break;
+}
+
+
+
+
+      // ===== Blink queued songs =====
+      case 'transport/queueNext': {
+        const { queuedSongId, mode } = msg; // 'finish' | 'bar' | 'instant'
+        state.transport.pendingNextAfterLoop = true;
+        state.transport.queuedSongId = queuedSongId || null;
+        state.transport.loopExitMode = ['finish','bar','instant'].includes(mode) ? mode : 'finish';
+        broadcastState();
+        break;
+      }
+
+
       // ===== Stato / Setlist =====
       case 'state/request':
         ensureDemoSession();
-        ws.send(JSON.stringify({ type: 'state', state }));
+        broadcastState(ws);
         break;
 
       case 'state/loadSession': {
@@ -264,17 +337,118 @@ function parseChordsWithSections(raw) {
       case 'state/setlist': {
         const { songs } = msg;
         if (!Array.isArray(songs)) break;
-        state.session = { id: 'ad-hoc', title: 'Ad-Hoc', songs };
+      
+        const keep = state.currentSongId;
         state.setlist = songs;
-        selectSongByIndex(0);
+      
+        // Se la selezione esiste ancora, tienila; altrimenti seleziona la prima
+        if (keep && idxById(keep) >= 0) {
+          state.currentSongId = keep;
+        } else {
+          state.currentSongId = (state.setlist[0]?.id) || null;
+        }
+        broadcastState();
         break;
       }
 
+
+
+
+      case 'ping': {
+        // il client manda {type:'ping', t: Date.now()}
+        // rispondi con l’eco e il serverTime attuale
+        ws.send(JSON.stringify({ type: 'pong', echo: msg.t || 0, serverTime: Date.now() }));
+        break;
+      }
+
+
       // ===== Transport / Song nav =====
-      case 'transport/prev': prevSong(); state.lastEvent = 'Prev song'; break;
-      case 'transport/next': nextSong(); state.lastEvent = 'Next song'; break;
-      case 'transport/play': sendCC(CC_PLAY, 127); state.lastEvent = 'Play'; broadcastState(); break;
-      case 'transport/stop': sendCC(CC_STOP, 127); state.lastEvent = 'Stop'; broadcastState(); break;
+      case 'transport/play': {
+        if (!state.currentSongId && Array.isArray(state.setlist) && state.setlist.length) {
+          selectSongByIndex(0); // seleziona la prima se niente è selezionato
+        }
+        state.transport.playing = true;
+        state.transport.playingSongId = state.currentSongId || null;
+        
+        // Se stavamo "queuando" proprio questo brano, azzera la coda (niente blink residuo)
+        if (state.transport.queuedSongId === state.currentSongId) {
+          state.transport.pendingNextAfterLoop = false;
+          state.transport.queuedSongId = null;
+          state.transport.loopExitMode = null;
+        }
+
+        // resume se la pausa era sulla stessa song
+        const resumeMs = (state.transport.pausedSongId === state.transport.playingSongId)
+          ? Math.max(0, Number(state.transport.pausedElapsedMs || 0))
+          : 0;
+        state.transport.startedAt = Date.now() - resumeMs;
+        state.transport.pausedSongId = null;
+        state.transport.pausedElapsedMs = 0;
+        state.lastEvent = 'Play';
+        sendCC(CC_PLAY, 127);
+        broadcastState();
+        break;
+      }
+      case 'transport/pause': {
+      // pausa: conserva posizione e brano
+      const { songId, elapsedMs } = msg;
+      state.transport.playing = false;
+      state.transport.playingSongId = null;
+      state.transport.startedAt = 0;
+      state.transport.pausedSongId = songId || state.currentSongId || null;
+      state.transport.pausedElapsedMs = Math.max(0, Number(elapsedMs || 0));
+      state.lastEvent = 'Pause';
+      broadcastState();
+      break;
+      }
+
+      case 'transport/stop': {
+        state.transport.playing = false;
+        state.transport.playingSongId = null;
+        state.transport.startedAt = 0;
+      
+        // >>> aggiunte per lo stop “pulito”
+        state.transport.pausedSongId = null;
+        state.transport.pausedElapsedMs = 0;
+        state.transport.pendingNextAfterLoop = false;
+        state.transport.queuedSongId = null;
+        state.transport.loopExitMode = null;
+      
+        state.lastEvent = 'Stop';
+        sendCC(CC_STOP, 127);
+        broadcastState();
+        break;
+      }
+
+      case 'transport/next': {
+        selectNext(); // cambia currentSongId + broadcast
+        if (state.transport.playing) {
+          state.transport.playingSongId = state.currentSongId
+          state.transport.startedAt = Date.now();
+          
+        }
+        state.transport.pendingNextAfterLoop = false;
+        state.transport.queuedSongId = null;
+        state.transport.loopExitMode = null;
+        state.lastEvent = 'Next song';
+        broadcastState();
+        break;
+      }
+      case 'transport/prev': {
+        selectPrev(); // cambia currentSongId + broadcast
+        if (state.transport.playing) {
+          state.transport.playingSongId = state.currentSongId
+          state.transport.startedAt = Date.now();
+          
+        }
+        state.lastEvent = 'Prev song';
+        state.transport.pendingNextAfterLoop = false;
+        state.transport.queuedSongId = null;
+        state.transport.loopExitMode = null;
+        broadcastState();
+        break;
+      }
+
 
       // ===== Lane attiva =====
       case 'ui/setActiveLane': {
@@ -300,57 +474,55 @@ function parseChordsWithSections(raw) {
         break;
       }
 
-      // ===== Editor: applica righe al brano corrente =====
-      case 'editor/apply': {
-        const { lyricsText, chordsText } = msg;
+// ===== Editor: applica righe al brano corrente =====
+case 'editor/apply': {
+  const { lyricsText, chordsText } = msg;
   const song = state.currentSong;
   if (!song) break;
 
-const RE_SECTION = /^\s*\[([^\]]+)\]\s*$/;
+  const RE_SECTION = /^\s*\[([^\]]+)\]\s*$/;
 
-function parseLyricsWithSectionsServer(raw) {
-  const out = { sections: [], lines: [] };
-  if (typeof raw !== 'string') return out;
-  raw.split(/\r?\n/).forEach((line) => {
-    const s = line.trim();
-    if (!s) return;
-    const m = s.match(RE_SECTION);
-    if (m) out.sections.push({ name: m[1].trim(), startIdx: out.lines.length });
-    else out.lines.push({ text: s });
-  });
-  return out;
-}
-function parseChordsWithSectionsServer(raw) {
-  const out = { sections: [], chords: [] };
-  if (typeof raw !== 'string') return out;
-  raw.split(/\r?\n/).forEach((line) => {
-    const s = line.trim();
-    if (!s) return;
-    const m = s.match(RE_SECTION);
-    if (m) out.sections.push({ name: m[1].trim(), startIdx: out.chords.length });
-    else s.split(/\s+/).forEach(tok => { if (tok) out.chords.push({ chord: tok }); });
-  });
-  return out;
-}
+  function parseLyricsWithSectionsServer(raw) {
+    const out = { sections: [], lines: [] };
+    if (typeof raw !== 'string') return out;
+    raw.split(/\r?\n/).forEach((line) => {
+      const s = line.trim();
+      if (!s) return;
+      const m = s.match(RE_SECTION);
+      if (m) out.sections.push({ name: m[1].trim(), startIdx: out.lines.length });
+      else out.lines.push({ text: s });
+    });
+    return out;
+  }
+  function parseChordsWithSectionsServer(raw) {
+    const out = { sections: [], chords: [] };
+    if (typeof raw !== 'string') return out;
+    raw.split(/\r?\n/).forEach((line) => {
+      const s = line.trim();
+      if (!s) return;
+      const m = s.match(RE_SECTION);
+      if (m) out.sections.push({ name: m[1].trim(), startIdx: out.chords.length });
+      else s.split(/\s+/).forEach(tok => { if (tok) out.chords.push({ chord: tok }); });
+    });
+    return out;
+  }
 
-// ...poi sostituisci l'assegnazione:
-if (typeof lyricsText === 'string') {
-  const p = parseLyricsWithSectionsServer(lyricsText);
-  song.lyrics = p.lines;
-  song.lyricsSections = p.sections;
-  state.currentLyricIndex = 0;
-}
-if (typeof chordsText === 'string') {
-  const p = parseChordsWithSectionsServer(chordsText);
-  song.chords = p.chords;
-  song.chordsSections = p.sections;
-  state.currentChordIndex = 0;
-}
-
+  if (typeof lyricsText === 'string') {
+    const p = parseLyricsWithSectionsServer(lyricsText);
+    song.lyrics = p.lines;
+    song.lyricsSections = p.sections;
+    state.currentLyricIndex = 0;
+  }
+  if (typeof chordsText === 'string') {
+    const p = parseChordsWithSectionsServer(chordsText);
+    song.chords = p.chords;
+    song.chordsSections = p.sections;
+    state.currentChordIndex = 0;
+  }
 
   state.lastEvent = 'Editor applied (with sections)';
   broadcastState();
-      break;
+  break;
 }
 
       // ===== Utility =====
@@ -359,6 +531,32 @@ if (typeof chordsText === 'string') {
         if (typeof index === 'number') selectSongByIndex(index);
         break;
       }
+      // dentro ws.on('message'):
+      case 'song/selectById': {
+        const { id } = msg;
+        if (id) {
+          // Seleziona (questa già fa broadcast della selezione non in play)
+          selectSongById(id);
+        
+          // Se siamo in play, significa che parte SUBITO il nuovo brano:
+          // allinea il transport e PULISCI la coda (stop blink ovunque)
+          if (state.transport.playing) {
+            state.transport.playingSongId = state.currentSongId;
+            state.transport.startedAt = Date.now();
+          
+            // 🔽 qui la parte che mancava
+            state.transport.pendingNextAfterLoop = false;
+            state.transport.loopExitMode = null;
+            state.transport.queuedSongId = null;
+          
+            state.lastEvent = 'Select song (playing)';
+            broadcastState();
+          }
+        }
+        break;
+      }
+
+
       case 'state/resetDemo': {
         state.session = null;
         state.setlist = [];
@@ -380,27 +578,19 @@ if (typeof chordsText === 'string') {
 function startEmbedded(opts = {}) {
   const host = opts.host || '0.0.0.0';
   const port = Number(opts.port || HTTP_PORT);
-
   if (server.listening) return { stop: stopEmbedded };
-
   server.listen(port, host, () => {
     console.log(`[HTTP] Lyrix Bridge on ${host}:${port}`);
     console.log(`[HTTP] Serving static from ./${STATIC_DIR}`);
   });
-
   return { stop: stopEmbedded };
 }
-
 function stopEmbedded() {
-  try { wss && wss.clients && wss.clients.forEach(c => { try { c.terminate(); } catch(_){} }); } catch (_){}
-  try { wss && wss.close && wss.close(); } catch (_){}
-  return new Promise(res => {
-    try { server.close(() => res()); } catch (_) { res(); }
-  });
+  try { wss?.clients?.forEach(c => { try { c.terminate(); } catch(_){} }); } catch(_){}
+  try { wss?.close?.(); } catch(_){}
+  return new Promise(res => { try { server.close(() => res()); } catch(_) { res(); }});
 }
-
 if (require.main === module) {
-  // Avvio classico per i tuoi .bat
   server.listen(HTTP_PORT, '0.0.0.0', () => {
     console.log(`[HTTP] Lyrix Bridge running at http://localhost:${HTTP_PORT}`);
     console.log(`[HTTP] Serving static from ./${STATIC_DIR}`);
@@ -408,4 +598,5 @@ if (require.main === module) {
 } else {
   module.exports = { startEmbedded };
 }
+
 
