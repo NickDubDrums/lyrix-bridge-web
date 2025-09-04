@@ -1,7 +1,20 @@
+import { DEFAULT_PREFS } from './defaults.js';
 import { loadPersisted, savePersisted } from './persistence.js';
 
 
 const subscribers = new Set();
+
+function shallowMergePrefs(base, add) {
+  // merge a livello 1: preserva oggetti performance/setlist,
+  // lasciando che quelli dell'utente sovrascrivano i default.
+  return {
+    ...base,
+    ...(add || {}),
+    performance: { ...(base.performance || {}), ...(add?.performance || {}) },
+    setlist: { ...(base.setlist || {}), ...(add?.setlist || {}) },
+  };
+}
+
 
 export const store = {
   ui: {
@@ -244,7 +257,7 @@ export function importSetlistJSON(obj, opts = {}) {
       setState(s => {
         if (persisted.data.songs) s.data.songs = persisted.data.songs;
         if (persisted.data.setlist) s.data.setlist = persisted.data.setlist;
-        if (persisted.prefs) s.prefs = { ...s.prefs, ...persisted.prefs };
+        if (persisted.prefs) s.prefs = shallowMergePrefs(s.prefs || {}, persisted.prefs);
       });
     }
   } catch (e) {
@@ -253,13 +266,13 @@ export function importSetlistJSON(obj, opts = {}) {
 })();
 
 
-import { DEFAULT_PREFS } from '../state/defaults.js';
-
-
 (function bootPrefs() {
-  // merge defaults
-  setState(s => { s.prefs = Object.assign({}, DEFAULT_PREFS, s.prefs || {}); });
-  // apply lock-on-start
+  // merge defaults → prefs finali
+  setState(s => { s.prefs = { ...DEFAULT_PREFS, ...(s.prefs || {}) }; });
+  // meta flag: per default non personalizzato
+  setState(s => { s.prefs = shallowMergePrefs(DEFAULT_PREFS, s.prefs || {}); });
+
+  // lock-on-start
   if (store.prefs?.setlist?.lockOnStart) {
     setState(s => { s.ui.lock = true; });
   }

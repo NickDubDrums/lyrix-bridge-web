@@ -26,6 +26,7 @@ Annota da qualche parte le rotte che useremo:
   <link rel="stylesheet" href="./css/theme.css"> 
   <link rel="stylesheet" href="./css/pages/setlist.css">
   <link rel="stylesheet" href="./css/pages/performance.css">
+  <link rel="stylesheet" href="./css/pages/settings.css">
   <link rel="stylesheet" href="css/modal.css">
 
 </head>
@@ -35,7 +36,10 @@ Annota da qualche parte le rotte che useremo:
       <button id="btn-hamburger" aria-label="Open menu" class="icon-button">☰</button>
        <div class="app-title">
           <img src="./assets/LyrixLogo.png" alt="Lyrix" class="app-logo">
-        </div>      <div class="app-actions">
+        </div>      
+        <div class="app-actions">
+        <span id="clock" class="clock"></span>
+
 <button id="btn-lock" class="lock-btn" role="switch" aria-checked="false" title="Lock (Ctrl+Shift+L)">
   <svg class="padlock" xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 50 50" aria-hidden="true">
     <!-- Tutto STROKE, niente fill -->
@@ -51,7 +55,7 @@ Annota da qualche parte le rotte che useremo:
   </svg>
 </button>
         <span id="ws-indicator" class="ws-indicator" title="WebSocket status"></span>
-        <span id="clock" class="clock"></span>
+        
       </div>
     </header>
 

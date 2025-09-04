@@ -348,7 +348,7 @@ function setPlaying(on, origin = 'local') {
     const empty = document.createElement('div');
     empty.className = 'empty-state';
     empty.innerHTML = `
-      <p class="muted">Nessun brano in setlist.</p>
+      <p class="muted">No songs in the setlist.</p>
       <div class="actions"><button id="btn-load-demo" class="btn">Load Demo Content</button></div>
     `;
     empty.querySelector('#btn-load-demo')?.addEventListener('click', () => {

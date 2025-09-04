@@ -10,7 +10,7 @@ const PERF_DEFAULTS_REV = 4; // incrementa quando cambi i default
 const PERF_DEFAULTS = {
 
   //LYRICS Default
-  lyricsSize: 42,
+  /*lyricsSize: 42,
   chordsSize: 28,
   textColor: '#f2f2f2',
   currentColor: '#ffffff',
@@ -24,7 +24,7 @@ chordsLineGap: 25,
 chordsOpacityDim: 0.28,
 chordsScaleCurrent: 1.80,
 chordsScaleSecondary: 1.5,
-chordsSectionGap: 28,
+chordsSectionGap: 28,*/
 };
 
 function isSection(line) {
@@ -182,29 +182,44 @@ const FORCE_RESET = [
 
 function applyPerfVars(node) {
   const p = getPerfPrefs();
-  node.style.setProperty('--lyrics-size', p.lyricsSize + 'px');
-  node.style.setProperty('--chords-size', p.chordsSize + 'px');
-  node.style.setProperty('--perf-fg', p.textColor);
-  node.style.setProperty('--current-fg', p.currentColor);
-  node.style.setProperty('--perf-bg', p.bgColor);
-  node.style.setProperty('--line-gap', p.lineGap + 'px');
-  const left = p.splitRatio / 50; // 50 -> 1fr, 25 -> .5fr ecc.
-  const right = (100 - p.splitRatio) / 50;
-  node.style.setProperty('--perf-left', left + 'fr');
-  node.style.setProperty('--perf-right', right + 'fr');
-  node.style.setProperty('--section-gap', (p.sectionGap ?? 28) + 'px');
-  node.style.setProperty('--lyrics-dim', String(p.lyricsOpacityDim ?? 0.28));
-  node.style.setProperty('--lyrics-current-scale', String(p.lyricsScaleCurrent ?? 1.06));
+  const target = node?.closest('.view.view-performance') || node || document.documentElement;
 
-    // ✨ NUOVE: specifiche per CHORDS
-  node.style.setProperty('--chords-line-gap', p.chordsLineGap + 'px');
-  node.style.setProperty('--chords-dim', String(p.chordsOpacityDim));
-  node.style.setProperty('--chords-current-scale', String(p.chordsScaleCurrent));
-  node.style.setProperty('--chords-secondary-scale', String(p.chordsScaleSecondary));
-  node.style.setProperty('--chords-section-gap', p.chordsSectionGap + 'px');
+  // ✅ Runtime/layout vars: imposta SOLO se il valore è valido, altrimenti rimuovi (torna al theme)
+  if (Number.isFinite(p.lyricsSize))   target.style.setProperty('--lyrics-size', p.lyricsSize + 'px');
+  else                                 target.style.removeProperty('--lyrics-size');
 
+  if (Number.isFinite(p.chordsSize))   target.style.setProperty('--chords-size', p.chordsSize + 'px');
+  else                                 target.style.removeProperty('--chords-size');
+
+  if (Number.isFinite(p.lineGap))      target.style.setProperty('--line-gap', p.lineGap + 'px');
+  else                                 target.style.removeProperty('--line-gap');
+
+   const left = p.splitRatio / 50; // 50 -> 1fr, 25 -> .5fr ecc.
+   const right = (100 - p.splitRatio) / 50;
+  // split ratio: solo se è un numero finito (altrimenti non toccare i default)
+  if (Number.isFinite(left) && Number.isFinite(right)) {
+    target.style.setProperty('--perf-left', left + 'fr');
+    target.style.setProperty('--perf-right', right + 'fr');
+  } else {
+    target.style.removeProperty('--perf-left');
+    target.style.removeProperty('--perf-right');
+  }
+
+  if (Number.isFinite(p.sectionGap))   target.style.setProperty('--section-gap', p.sectionGap + 'px');
+  else                                 target.style.removeProperty('--section-gap');
+
+  if (Number.isFinite(p.lyricsOpacityDim)) target.style.setProperty('--lyrics-dim', String(p.lyricsOpacityDim));
+  else                                     target.style.removeProperty('--lyrics-dim');
+
+  if (Number.isFinite(p.chordsLineGap)) target.style.setProperty('--chords-line-gap', p.chordsLineGap + 'px');
+  else                                  target.style.removeProperty('--chords-line-gap');
+
+  if (Number.isFinite(p.chordsOpacityDim)) target.style.setProperty('--chords-dim', String(p.chordsOpacityDim));
+  else                                     target.style.removeProperty('--chords-dim');
+
+  if (Number.isFinite(p.chordsSectionGap)) target.style.setProperty('--chords-section-gap', p.chordsSectionGap + 'px');
+  else                                     target.style.removeProperty('--chords-section-gap');
 }
-
 function currentSong(state) {
   const s = state || store;
   const id = s.ui?.selectedSongId || s.data?.setlist?.[0] || null;
@@ -301,11 +316,11 @@ const $btnChords = el.querySelector('#btn-view-chords');
 
 
   function renderFromState(s) {
-    applyPerfVars(stage);
+    applyPerfVars(el);
     const song = currentSong(s);
 
     if (!song) {
-      vLyrics.innerHTML = '<p class="muted">Seleziona una song nella Setlist.</p>';
+      vLyrics.innerHTML = '<p class="muted">Select a song in the <a href="#/setlist">Setlist</a>.</p>';
       //vChords.innerHTML = '';
       return;
     }

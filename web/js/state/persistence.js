@@ -1,33 +1,32 @@
 // web/js/state/persistence.js
-// Simple localStorage persistence for data + prefs
-
-const KEY = 'lyrix.store.v1';
+const KEY = 'lyrix_store_v1';
 
 export function loadPersisted() {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return null;
-    return parsed;
+    return JSON.parse(raw);
   } catch (e) {
-    console.warn('Persistence load error', e);
+    console.warn('loadPersisted error', e);
     return null;
   }
 }
 
-export function savePersisted(obj) {
-  try {
+ export function savePersisted(store) {
+   try {
     const payload = {
-      data: obj?.data ?? { songs: {}, setlist: [] },
-      prefs: obj?.prefs ?? {},
+      data: {
+        songs: store?.data?.songs ?? [],
+        setlist: store?.data?.setlist ?? [],
+      },
+      prefs: store?.prefs ?? {},  // include performance.lyrics/chords + meta
     };
-    localStorage.setItem(KEY, JSON.stringify(payload));
-  } catch (e) {
-    console.warn('Persistence save error', e);
-  }
-}
+     localStorage.setItem(KEY, JSON.stringify(payload));
+   } catch (e) {
+     console.warn('savePersisted error', e);
+   }
+ }
 
 export function clearPersisted() {
-  try { localStorage.removeItem(KEY); } catch {}
+  localStorage.removeItem(KEY);
 }

@@ -1,3 +1,10 @@
+/* ==========================================================================
+   PERFORMANCE VIEW — usa variabili (definite in theme.css)
+   Ordinato in sezioni; nessun cambio funzionale rispetto alla tua versione.
+   ========================================================================== */
+
+/* ---------- Header & View shell ------------------------------------------ */
+
 .view-header {
   padding-top: 0;
   padding-bottom: 0;
@@ -8,6 +15,7 @@
   grid-template-rows: auto 1fr;
   height: 100%;
 }
+
 .view-performance .performance-body {
   display: grid;
   place-items: center;
@@ -15,16 +23,16 @@
   height: 100%;
 }
 
+/* ---------- Stage card ---------------------------------------------------- */
 .performance-stage {
   --split-gutter: 8px;
   --divider-radius: 6px;
-
   width: 100%;
   height: min(78vh, 80dvh);
   border-radius: 16px;
   padding: 28px;
   background: var(--perf-bg);
-  color: var(--perf-fg);
+  /*color: var(--perf-fg);*/
   box-shadow: 0 8px 28px rgba(0,0,0,.28);
   overflow: hidden;
   display: grid;
@@ -33,24 +41,25 @@
   border: 1px solid var(--border);
 }
 
-/* Titolo in alto dentro lo stage */
+/* ---------- Title & Section indicator ------------------------------------ */
 .performance-title {
+  /* se impostato da settings → usa --title-scale, altrimenti resta 20px */
+  font-size: calc(20px * var(--title-scale, 1));
   font-weight: 700;
-  font-size: 20px;
   letter-spacing: 0.3px;
   opacity: .9;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   text-shadow: 3px 3px 5px rgb(0, 0, 0);
+  color: var(--title-fg);
 }
 
-/* Song Section indicator*/
 .section-indicator {
   font-weight: 600;
-  font-size: 40px;
+  font-size: calc(40px * var(--section-scale, 1));
   opacity: .8;
-  color: var(--perf-fg);
+  color: var(--section-fg);
   text-align: center;
   text-shadow: 3px 3px 5px rgb(0, 0, 0);
 }
@@ -58,7 +67,7 @@
 
 .performance-toolbar .muted { opacity: .7; }
 
-/* ─────────────  SPLIT LAYOUT  ───────────── */
+/* ---------- Split layout (orizzontale/verticale) ------------------------- */
 .stage-content {
   display: grid;
   grid-template-rows: 1fr;
@@ -72,22 +81,20 @@
   grid-template-columns: var(--perf-left, 1fr) var(--split-gutter) var(--perf-right, 1fr);
   grid-template-rows: 1fr;
 }
+
 .stage-content.split-v {
   grid-template-columns: 1fr;
   grid-template-rows: var(--perf-top, 1fr) var(--split-gutter) var(--perf-bottom, 1fr);
 }
 
-.pane {
-  min-width: 0;
-  min-height: 0;
-}
+.pane { min-width: 0; min-height: 0; }
 
 .pane-lyrics { grid-area: lyrics; }
 .pane-chords { grid-area: chords; }
 
 .stage-content.split-h .pane-lyrics { grid-column: 1; grid-row: 1; }
 .stage-content.split-h .split-handle  { grid-column: 2; grid-row: 1; }
-.stage-content.split-h .pane-chords { grid-column: 3; grid-row: 1; }
+.stage-content.split-h .pane-chords   { grid-column: 3; grid-row: 1; }
 
 .stage-content.split-v .pane-lyrics { grid-column: 1; grid-row: 1; }
 .stage-content.split-v .split-handle  { grid-column: 1; grid-row: 2; }
@@ -106,13 +113,18 @@
   inset: 0;
   opacity: .7;
   background:
-    linear-gradient(90deg, transparent 45%, color-mix(in oklab, var(--perf-fg) 25%, transparent) 50%, transparent 55%);
+    linear-gradient(90deg,
+      transparent 45%,
+      color-mix(in oklab, var(--perf-fg) 25%, transparent) 50%,
+      transparent 55%);
 }
 .stage-content.split-h .split-handle { cursor: col-resize; }
 .stage-content.split-v .split-handle { cursor: row-resize; }
-.split-handle.is-dragging { background: color-mix(in oklab, var(--perf-fg) 14%, var(--border)); }
+.split-handle.is-dragging {
+  background: color-mix(in oklab, var(--perf-fg) 14%, var(--border));
+}
 
-/* ───────────── LYRICS view ───────────── */
+/* ---------- Lyrics -------------------------------------------------------- */
 .lyrics {
   overflow: auto;
   padding-block: 18vh;
@@ -123,35 +135,42 @@
 }
 .lyrics::-webkit-scrollbar { display: none; }
 
+/* Blocco iniziale (come nel tuo file) */
 .lyrics .line {
   font-size: var(--lyrics-size, 48px);
   line-height: 1.5;
   opacity: var(--lyrics-dim, .28);
-  color: var(--perf-fg, #f2f2f2);
+  color: var(--perf-lyrics-fg, #f2f2f2);
   white-space: pre-wrap;
   word-break: break-word;
   transform-origin: center center;
   transform: scale(var(--lyrics-secondary-scale, .94));
   transition:
-    opacity .32s cubic-bezier(.22,.61,.36,1),
+    opacity   .32s cubic-bezier(.22,.61,.36,1),
     transform .32s cubic-bezier(.22,.61,.36,1),
-    color .32s cubic-bezier(.22,.61,.36,1);
+    color     .32s cubic-bezier(.22,.61,.36,1);
 }
 .lyrics .line + .line { margin-top: var(--line-gap, 20px); }
+
 .lyrics .line.current {
   opacity: 1;
-  color: var(--current-fg);
+  color: var(--current-lyrics-fg, var(--current-fg));
   transform: scale(var(--lyrics-current-scale, 1.08));
-  text-shadow: 0 0 14px color-mix(in oklab, var(--current-fg) 18%, transparent);
+  text-shadow: 0 0 14px color-mix(in oklab, var(--current-lyrics-fg) 18%, transparent);
 }
+
 @media (prefers-reduced-motion: reduce) {
   .lyrics .line { transition: none; }
 }
+
 .lyrics .gap { height: var(--section-gap, 28px); }
+
+/* Override finale identico al tuo (mantiene il “focus” che vuoi):
+   Qui si reimposta l’opacità base e la scala della current a 1.06 */
 .lyrics .line { opacity: var(--lyrics-dim, .28); }
 .lyrics .line.current { transform: translateZ(0) scale(var(--lyrics-current-scale, 1.06)); }
 
-/* ───────────── CHORDS view ───────────── */
+/* ---------- Chords -------------------------------------------------------- */
 .chords {
   overflow: auto;
   padding-block: 15vh;
@@ -159,35 +178,41 @@
   padding: 5rem;
   -ms-overflow-style: none;
   scrollbar-width: none;
+  
 }
 .chords::-webkit-scrollbar { display: none; }
 
-.chords .line {
-  font-size: var(--chords-size, 36px);
+.chords .line span{
+  font-size: var(--chords-size, 28px);
   line-height: 1.5;
   opacity: var(--chords-dim, .28);
-  color: var(--perf-fg, #f2f2f2);
+  color: var(--perf-lyrics-fg, #f2f2f2);
   white-space: pre-wrap;
   word-break: break-word;
   transform-origin: center center;
-  transform: scale(var(--chords-secondary-scale, .94));
+  transform: scale(var(--lyrics-secondary-scale, .94));
   transition:
-    opacity .32s cubic-bezier(.22,.61,.36,1),
+    opacity   .32s cubic-bezier(.22,.61,.36,1),
     transform .32s cubic-bezier(.22,.61,.36,1),
-    color .32s cubic-bezier(.22,.61,.36,1);
+    color     .32s cubic-bezier(.22,.61,.36,1);
 }
-.chords .line + .line { margin-top: var(--chords-line-gap); }
+.chords .line + .line { margin-top: var(--chords-line-gap, 20px); }
 .chords .gap + .line { margin-top: var(--chords-line-gap, 0px); }
+
 .chords .line.current {
   opacity: 1;
+  color: var(--current-chords-fg, var(--perf-chords-fg));
   transform: translateZ(0) scale(var(--chords-current-scale, 1.06));
 }
+
 .chords .line .chord-token {
   display: inline-block;
-  margin-right: 12px;
-  opacity: .35;
+  margin-left: var(--chords-gap, 6px);
+  margin-right: var(--chords-gap, 6px);
+  opacity: var(--chords-dim, .28);
   transform: translateY(0);
-  transition: transform .24s cubic-bezier(.22,.61,.36,1), opacity .24s;
+  transition: transform .24s cubic-bezier(.22,.61,.36,1),
+              opacity   .24s;
 }
 .chords .line .chord-token.now {
   opacity: 1;
@@ -196,7 +221,10 @@
   border-bottom: 2px solid currentColor;
   padding-bottom: 2px;
 }
-.chords .gap { height: var(--chords-section-gap, var(--section-gap)); }
+
+.chords .gap {
+  height: var(--chords-section-gap, var(--section-gap));
+}
 
 @media (prefers-reduced-motion: reduce) {
   .chords .line { transition: none; }

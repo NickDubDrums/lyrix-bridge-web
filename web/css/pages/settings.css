@@ -1,7 +1,12 @@
+.view-header {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 
 .view-settings .settings-grid{
   display:grid;
-  grid-template-columns: repeat(auto-fit,minmax(280px,1fr));
+  grid-template-columns: repeat(auto-fit,minmax(450px,1fr));
   gap:16px;
   padding:16px;
 }
@@ -12,11 +17,70 @@
   padding: 16px;
 }
 .view-settings .card h3{ margin-top:0; }
-.view-settings .field{ display:grid; grid-template-columns: 1fr auto; align-items:center; gap:8px; margin-bottom:10px; }
+.view-settings .field{
+  display:grid; grid-template-columns: 1fr auto; align-items:center; gap:10px; margin-bottom:12px;
+}
 .view-settings .field.toggle{ grid-template-columns: 1fr auto; }
 .view-settings .field.row{ grid-template-columns: repeat(3, auto); gap:10px; }
 .view-settings .suffix{ opacity:0.7; }
 .view-settings input[type="text"]{ width: 120px; }
-.view-settings .btn{ padding:8px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.15); background:transparent; cursor:pointer; }
-.view-settings .btn:hover{ background:rgba(255,255,255,0.06); }
-.view-settings .btn.danger{ border-color: rgba(255,0,0,0.3); }
+
+/* Input base */
+.view-settings input[type="number"],
+.view-settings input[type="text"],
+.view-settings input[type="color"]{
+  height: 34px; padding: 0 10px;
+  background: color-mix(in oklab, var(--surface, #151820) 86%, black);
+  border: 1px solid color-mix(in oklab, var(--border, #2a2f3a) 80%, transparent);
+  color: var(--fg); border-radius: 8px;
+  transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+.view-settings input[type="number"]:focus,
+.view-settings input[type="text"]:focus{
+  outline: 0; border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 28%, transparent);
+}
+.view-settings input[type="color"]{
+  padding: 0; inline-size: 42px; block-size: 34px;
+}
+
+/* Slider (range) */
+.view-settings input[type="range"]{
+  -webkit-appearance: none; appearance: none; height: 4px; width: 180px;
+  background: color-mix(in oklab, var(--border) 70%, transparent);
+  border-radius: 999px; outline: 0;
+}
+.view-settings input[type="range"]::-webkit-slider-thumb{
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height:16px; border-radius:50%;
+  background: var(--fg); border: 2px solid var(--accent);
+  transition: transform .08s ease;
+}
+.view-settings input[type="range"]::-webkit-slider-thumb:active{ transform: scale(1.04); }
+.view-settings input[type="range"]::-moz-range-thumb{
+  width: 16px; height:16px; border-radius:50%;
+  background: var(--fg); border: 2px solid var(--accent);
+}
+
+/* Checkbox → switch moderno */
+.view-settings .switch {
+  position: relative; width: 42px; height: 24px; display:inline-block;
+}
+.view-settings .switch input {
+  position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; margin:0;
+}
+.view-settings .switch .ui {
+  position:absolute; inset:0; background: color-mix(in oklab, var(--border) 65%, transparent);
+  border-radius: 999px; transition: background .2s ease, box-shadow .2s ease;
+}
+.view-settings .switch .ui::after{
+  content:''; position:absolute; left:3px; top:3px; width:18px; height:18px; border-radius:50%;
+  background: var(--fg); transition: transform .2s ease;
+  box-shadow: 0 2px 6px rgba(0,0,0,.35);
+}
+.view-settings .switch input:checked + .ui{
+  background: color-mix(in oklab, var(--accent) 50%, transparent);
+}
+.view-settings .switch input:checked + .ui::after{
+  transform: translateX(18px);
+}

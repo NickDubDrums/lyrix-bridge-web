@@ -3,8 +3,16 @@
   display: flex; align-items: center; gap: 12px;
   padding: 0 12px; background: var(--surface); border-bottom: 1px solid var(--border);
   z-index: 10;
+  overflow: hidden;
 }
 .app-title { font-size: 16px; font-weight: 600; }
+.app-actions {
+  position: absolute;
+  right: 50px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
 
 .app-drawer {
   position: fixed; top: var(--h); left: 0; bottom: 0; width: var(--drawer-w);
@@ -18,7 +26,7 @@
 .nav-link { padding: 10px 12px; border-radius: 8px; }
 .nav-link:hover { background: rgba(255,255,255,.06); }
 .app-title { display:flex; align-items:center; }
-.app-logo { height: 140px; width: auto; display:block; }
+.app-logo {position: relative; height: 140px; width: auto; display:block; z-index: 0; top: 3px; }
 
 
 .app-root {
@@ -27,7 +35,7 @@
   max-width: 1600px; margin: 0 auto;
 }
 
-.ws-indicator { display:inline-block; width:10px; height:10px; border-radius:50%; background:#666; margin-left:8px; box-shadow: 1px 1px 3px 0 rgb(0, 0, 0); }
+.ws-indicator { display:inline-block; width:15px; height: 15px; border-radius:50%; background:#666; margin-left:30px; box-shadow: 1px 1px 3px 0 rgb(0, 0, 0); }
 .ws-indicator.ok { background:#3ecf8e; }
 .ws-indicator.bad { background:#cf3e3e; }
 
@@ -35,7 +43,7 @@
 
 
 .toast-layer, .modal-layer { position: fixed; inset: 0; pointer-events: none; }
-.clock { margin-left: 10px; opacity: .8; }
+.clock { margin-right: 30px; opacity: .8; font-size: 50px;}
 
 /* Lock button (stroke-only) */
 .lock-btn {

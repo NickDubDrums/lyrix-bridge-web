@@ -119,7 +119,7 @@ function renderModal({ title, message, html, actions, input, variant = 'default'
 // API comode
 export function modalAlert(message, opts = {}) {
   return renderModal({
-    title: opts.title ?? 'Attenzione',
+    title: opts.title ?? 'Attention',
     message,
     actions: [{ id: 'ok', label: opts.okText ?? 'OK', kind: 'primary' }],
     variant: 'alert',
@@ -128,11 +128,11 @@ export function modalAlert(message, opts = {}) {
 
 export function modalConfirm(message, opts = {}) {
   return renderModal({
-    title: opts.title ?? 'Conferma',
+    title: opts.title ?? 'Confirm',
     message,
     actions: [
-      { id: 'cancel', label: opts.cancelText ?? 'Annulla' },
-      { id: 'ok',     label: opts.okText ?? 'Conferma', kind: 'primary', value: true },
+      { id: 'cancel', label: opts.cancelText ?? 'Cancel' },
+      { id: 'ok',     label: opts.okText ?? 'Confirm', kind: 'primary', value: true },
     ],
     variant: 'confirm',
   }).then(v => v === true);
@@ -140,11 +140,11 @@ export function modalConfirm(message, opts = {}) {
 
 export function modalPrompt(message, opts = {}) {
   return renderModal({
-    title: opts.title ?? 'Inserisci',
+    title: opts.title ?? 'Insert',
     message,
     input: { placeholder: opts.placeholder ?? '', value: opts.value ?? '', multiline: !!opts.multiline },
     actions: [
-      { id: 'cancel', label: opts.cancelText ?? 'Annulla' },
+      { id: 'cancel', label: opts.cancelText ?? 'Cancel' },
       { id: 'ok',     label: opts.okText ?? 'OK', kind: 'primary' },
     ],
     variant: 'prompt',
