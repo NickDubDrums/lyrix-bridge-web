@@ -26,6 +26,21 @@ chordsScaleCurrent: 1.80,
 chordsScaleSecondary: 1.5,
 chordsSectionGap: 28,*/
 };
+// Riferimenti globali alla view corrente (li settiamo nel render)
+let _vLyrics = null;
+let _vChords = null;
+
+function recenterCurrentLine() {
+  const rt = getRuntimeSafe();
+  if (rt.view === 'chords') {
+    const cur = _vChords?.querySelector('.line.current');
+    if (cur) smoothScrollToCenter(_vChords, cur, 320);
+  } else {
+    const cur = _vLyrics?.querySelector('.line.current');
+    if (cur) smoothScrollToCenter(_vLyrics, cur, 320);
+  }
+}
+
 
 function isSection(line) {
   const t = (typeof line === 'string' ? line : (line?.text ?? '')).trim();
@@ -278,7 +293,7 @@ export function renderPerformance() {
   const el = document.createElement('section');
   el.className = 'view view-performance';
   el.innerHTML = `
-  <header class="view-header">
+<header class="view-header perf-chrome">
     <h2>Performance</h2>
     <div class="spacer"></div>
     <div class="performance-toolbar">
@@ -292,7 +307,7 @@ export function renderPerformance() {
   </header>
 
   <div class="performance-body">
-    <div class="performance-stage">
+    <div class="performance-stage perf-core">
       <div class="performance-titlebar">
         <div class="performance-title" id="perf-title"></div>
         <div class="section-indicator" id="perf-section"></div>
@@ -303,6 +318,95 @@ export function renderPerformance() {
   </div>
 `;
 
+// Usa il root della view come "wrap"
+const wrap = el;
+
+
+// ───────────────── Fullscreen: UI ─────────────────
+const fsBtn = document.createElement('button');
+fsBtn.className = 'btn-icon btn-fs-toggle';
+fsBtn.type = 'button';
+fsBtn.setAttribute('aria-label', 'Toggle fullscreen');
+fsBtn.innerHTML = `
+  <!-- Maximize icon -->
+  <svg class="icon-fs-enter" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+    <path fill="currentColor" d="M7 3h2v4h4v2H7zM15 17h4v-4h2v6h-6zM21 7h-6V5h4V1h2zM3 21h6v-2H5v-4H3z"/>
+  </svg>
+  <!-- Minimize icon -->
+  <svg class="icon-fs-exit" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+    <path fill="currentColor" d="M7 7h4V5H5v6h2zm10 10h-4v2h6v-6h-2zM17 7v4h2V5h-6v2zM7 17v-4H5v6h6v-2z"/>
+  </svg>
+`;
+wrap.appendChild(fsBtn);
+
+
+// ───────────────── Fullscreen: Logic ─────────────────
+
+document.addEventListener('fullscreenchange', () => {
+  if (!isFullscreen()) wrap.classList.remove('is-fullscreen', 'is-fullscreen-fallback');
+  requestAnimationFrame(recenterCurrentLine); // ⬅️ aggiungi questa riga
+});
+
+function isFullscreen() {
+  return !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement);
+}
+
+async function enterFS(el) {
+  try {
+    if (el.requestFullscreen) await el.requestFullscreen();
+    else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+    else if (el.mozRequestFullScreen) await el.mozRequestFullScreen();
+    // Fallback: se il browser non supporta l’API, useremo una classe CSS
+    else el.classList.add('is-fullscreen-fallback');
+    el.classList.add('is-fullscreen'); // usata anche per nascondere la chrome
+  } catch (e) {
+    // fallback comunque
+    el.classList.add('is-fullscreen', 'is-fullscreen-fallback');
+  }
+    requestAnimationFrame(() => {
+    wrap.focus({ preventScroll: true });
+    recenterCurrentLine();
+    });
+  
+}
+
+async function exitFS(el) {
+  try {
+    if (isFullscreen()) {
+      if (document.exitFullscreen) await document.exitFullscreen();
+      else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
+      else if (document.mozCancelFullScreen) await document.mozCancelFullScreen();
+    }
+  } finally {
+    el.classList.remove('is-fullscreen', 'is-fullscreen-fallback');
+  }
+  
+}
+
+fsBtn.addEventListener('click', () => {
+  if (isFullscreen() || wrap.classList.contains('is-fullscreen-fallback')) {
+    exitFS(wrap);
+  } else {
+    enterFS(wrap);
+  }
+});
+
+// Esc / cambi di stato (es. F11 o ESC)
+document.addEventListener('fullscreenchange', () => {
+  if (!isFullscreen()) wrap.classList.remove('is-fullscreen', 'is-fullscreen-fallback');
+});
+
+// Shortcut "f" per toggle (comodo live)
+wrap.addEventListener('keydown', (e) => {
+  if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    fsBtn.click();
+  }
+});
+// Assicurati che wrap possa ricevere focus
+wrap.setAttribute('tabindex', '-1');
+
+
 
 const stage   = el.querySelector('.performance-stage');
 const vTitle  = el.querySelector('#perf-title');
@@ -312,6 +416,8 @@ const vChords = el.querySelector('.chords');
 const $btnLyrics = el.querySelector('#btn-view-lyrics');
 const $btnChords = el.querySelector('#btn-view-chords');
 
+_vLyrics = vLyrics;
+_vChords = vChords;
 
 
 
@@ -559,6 +665,7 @@ $btnLyrics.addEventListener('click', () => {
   const rt = getRuntimeSafe();
   if (rt.view !== 'lyrics') {
     setState(s => { s.runtime.performance.view = 'lyrics'; });
+    requestAnimationFrame(recenterCurrentLine);
   }
 });
 

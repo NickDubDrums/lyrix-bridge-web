@@ -230,3 +230,84 @@
   .chords .line { transition: none; }
   .chords .line .chord-token { transition: none; }
 }
+
+/* ───────── Fullscreen Button ───────── */
+.view.view-performance {
+  position: relative; /* serve per posizionare il bottone in alto a dx */
+}
+
+.btn-icon.btn-fs-toggle {
+  position: absolute;
+  top: 100px;
+  right: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--btn-border, rgba(255,255,255,0.12));
+  background: var(--btn-bg, rgba(255,255,255,0.06));
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+  transition: transform .15s ease, background .15s ease, border-color .15s ease;
+}
+.btn-icon.btn-fs-toggle:hover { transform: scale(1.04); }
+.btn-icon.btn-fs-toggle:active { transform: scale(0.98); }
+
+.btn-fs-toggle .icon-fs-exit { display: none; }
+.view.view-performance.is-fullscreen .btn-fs-toggle .icon-fs-enter { display: none; }
+.view.view-performance.is-fullscreen .btn-fs-toggle .icon-fs-exit { display: block; }
+
+/* ───────── Fullscreen State ───────── */
+/* Quando siamo in fullscreen (via API) oppure in fallback, snelliamo l’interfaccia */
+.view.view-performance.is-fullscreen,
+.view.view-performance.is-fullscreen-fallback {
+  /* Niente margini esterni che “sporcano” la scena */
+  margin: 0;
+  /* Tipicamente i tuoi sfondi sono scuri, manteniamo coerenza */
+  background: var(--app-bg, #111);
+}
+
+/* Nascondi tutta la “chrome” superflua in fullscreen */
+.view.view-performance.is-fullscreen .perf-chrome,
+.view.view-performance.is-fullscreen-fallback .perf-chrome {
+  display: none !important;
+}
+
+/* Assicura che la parte core occupi tutto lo spazio disponibile */
+.view.view-performance.is-fullscreen .perf-core,
+.view.view-performance.is-fullscreen-fallback .perf-core {
+  /* full bleed */
+  padding: clamp(12px, 2vw, 24px);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Se l’API fullscreen non è disponibile, forziamo un overlay a schermo */
+.view.view-performance.is-fullscreen-fallback {
+  position: fixed !important;
+  inset: 0;
+  z-index: 9999;
+}
+
+/* (Opzionale) una lieve crescita del testo in fullscreen per leggibilità sul palco */
+.view.view-performance.is-fullscreen .perf-core .lyrics,
+.view.view-performance.is-fullscreen .perf-core .chords,
+.view.view-performance.is-fullscreen-fallback .perf-core .lyrics,
+.view.view-performance.is-fullscreen-fallback .perf-core .chords {
+  font-size: 1.08em;
+  line-height: 1.15;
+}
+
+/* No focus ring sul contenitore della performance view */
+.view.view-performance,
+.view.view-performance:focus,
+.view.view-performance:focus-visible {
+  outline: none !important;
+}
+
+/* Rimuovi il bordo della “card” */
+.view.view-performance .performance-stage {
+  border: none !important;
+}
