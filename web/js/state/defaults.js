@@ -25,13 +25,17 @@ export const DEFAULT_PREFS = {
     },
     // Section / Title (opzionali)
     sectionColor: '#b8c1ff',
-    titleColor: '#eaeaea',
+    titleColor: '#f2f2f2',
     sectionSizePct: 90,
     titleSizePct: 90,
    },
-   setlist: {
-     playOnClick: false,
-     dblClickOpensEditor: false,
-     lockOnStart: false,
-   },
+  setlist: {
+    playOnClick: false,
+    dblClickOpensEditor: true,
+    lockOnStart: false,
+    import: {
+      showModal: true,   // mostra il modale scelta ogni import
+      mode: 'add'        // default se il modale è disattivato
+    }
+  }
  };

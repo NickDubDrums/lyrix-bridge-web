@@ -67,71 +67,23 @@
 
 .performance-toolbar .muted { opacity: .7; }
 
-/* ---------- Split layout (orizzontale/verticale) ------------------------- */
-.stage-content {
-  display: grid;
-  grid-template-rows: 1fr;
-  grid-template-columns: 1fr;
-  gap: 0;
-  height: 100%;
-  min-height: 0;
-}
 
-.stage-content.split-h {
-  grid-template-columns: var(--perf-left, 1fr) var(--split-gutter) var(--perf-right, 1fr);
-  grid-template-rows: 1fr;
-}
-
-.stage-content.split-v {
-  grid-template-columns: 1fr;
-  grid-template-rows: var(--perf-top, 1fr) var(--split-gutter) var(--perf-bottom, 1fr);
-}
-
-.pane { min-width: 0; min-height: 0; }
-
-.pane-lyrics { grid-area: lyrics; }
-.pane-chords { grid-area: chords; }
-
-.stage-content.split-h .pane-lyrics { grid-column: 1; grid-row: 1; }
-.stage-content.split-h .split-handle  { grid-column: 2; grid-row: 1; }
-.stage-content.split-h .pane-chords   { grid-column: 3; grid-row: 1; }
-
-.stage-content.split-v .pane-lyrics { grid-column: 1; grid-row: 1; }
-.stage-content.split-v .split-handle  { grid-column: 1; grid-row: 2; }
-.stage-content.split-v .pane-chords { grid-column: 1; grid-row: 3; }
-
-.split-handle {
-  align-self: stretch;
-  justify-self: stretch;
-  background: color-mix(in oklab, var(--border) 70%, transparent);
-  border-radius: var(--divider-radius);
-  position: relative;
-}
-.split-handle::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  opacity: .7;
-  background:
-    linear-gradient(90deg,
-      transparent 45%,
-      color-mix(in oklab, var(--perf-fg) 25%, transparent) 50%,
-      transparent 55%);
-}
-.stage-content.split-h .split-handle { cursor: col-resize; }
-.stage-content.split-v .split-handle { cursor: row-resize; }
-.split-handle.is-dragging {
-  background: color-mix(in oklab, var(--perf-fg) 14%, var(--border));
-}
 
 /* ---------- Lyrics -------------------------------------------------------- */
 .lyrics {
   overflow: auto;
   padding-block: 18vh;
   text-align: center;
-  padding: 5rem;
+  padding: var(--pad-top, 25vh) 5rem var(--pad-bottom, 30vh) 5rem;
   -ms-overflow-style: none;
   scrollbar-width: none;
+    -webkit-touch-callout: none; /* iOS Safari */
+    -webkit-user-select: none; /* Safari */
+     -khtml-user-select: none; /* Konqueror HTML */
+       -moz-user-select: none; /* Old versions of Firefox */
+        -ms-user-select: none; /* Internet Explorer/Edge */
+            user-select: none; /* Non-prefixed version, currently
+                                  supported by Chrome, Edge, Opera and Firefox */
 }
 .lyrics::-webkit-scrollbar { display: none; }
 
@@ -175,10 +127,17 @@
   overflow: auto;
   padding-block: 15vh;
   text-align: center;
-  padding: 5rem;
+  padding: var(--pad-top, 25vh) 5rem var(--pad-bottom, 30vh) 5rem;
   -ms-overflow-style: none;
   scrollbar-width: none;
-  
+
+    -webkit-touch-callout: none; /* iOS Safari */
+    -webkit-user-select: none; /* Safari */
+     -khtml-user-select: none; /* Konqueror HTML */
+       -moz-user-select: none; /* Old versions of Firefox */
+        -ms-user-select: none; /* Internet Explorer/Edge */
+            user-select: none; /* Non-prefixed version, currently
+                                  supported by Chrome, Edge, Opera and Firefox */
 }
 .chords::-webkit-scrollbar { display: none; }
 
@@ -190,7 +149,7 @@
   white-space: pre-wrap;
   word-break: break-word;
   transform-origin: center center;
-  transform: scale(var(--lyrics-secondary-scale, .94));
+  transform: scale(var(--chords-secondary-scale, .94));
   transition:
     opacity   .32s cubic-bezier(.22,.61,.36,1),
     transform .32s cubic-bezier(.22,.61,.36,1),
@@ -254,7 +213,7 @@
 .btn-icon.btn-fs-toggle:hover { transform: scale(1.04); }
 .btn-icon.btn-fs-toggle:active { transform: scale(0.98); }
 
-.btn-fs-toggle .icon-fs-exit { display: none; }
+.btn-fs-toggle .icon-fs-exit { display: none; position: inherit; top: 50;}
 .view.view-performance.is-fullscreen .btn-fs-toggle .icon-fs-enter { display: none; }
 .view.view-performance.is-fullscreen .btn-fs-toggle .icon-fs-exit { display: block; }
 
@@ -296,8 +255,7 @@
 .view.view-performance.is-fullscreen .perf-core .chords,
 .view.view-performance.is-fullscreen-fallback .perf-core .lyrics,
 .view.view-performance.is-fullscreen-fallback .perf-core .chords {
-  font-size: 1.08em;
-  line-height: 1.15;
+  padding: var(--pad-top, 45vh) 5rem var(--pad-bottom, 45vh) 5rem;
 }
 
 /* No focus ring sul contenitore della performance view */
@@ -310,4 +268,123 @@
 /* Rimuovi il bordo della “card” */
 .view.view-performance .performance-stage {
   border: none !important;
+}
+
+/* Fullscreen: il palco deve occupare tutto il viewport */
+.view.view-performance.is-fullscreen .performance-body,
+.view.view-performance.is-fullscreen-fallback .performance-body {
+  padding: 0;
+  place-items: stretch; /* niente centering a griglia: occupa tutto */
+}
+
+.view.view-performance.is-fullscreen .performance-stage,
+.view.view-performance.is-fullscreen-fallback .performance-stage {
+  height: 100dvh;       /* pieno viewport */
+  min-height: 100dvh;
+  border-radius: 0;     /* (opzionale) niente raggio in FS */
+  box-shadow: none;     /* (opzionale) niente ombra in FS */
+}
+
+/* ---------- Split layout (orizzontale/verticale) ------------------------- */
+.stage-content {
+  display: grid;
+  grid-template-rows: 1fr;
+  grid-template-columns: 1fr;
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+.stage-content.split-h {
+  grid-template-columns: var(--perf-left, 1fr) var(--split-gutter) var(--perf-right, 1fr);
+  grid-template-rows: 1fr;
+}
+
+.stage-content.split-v {
+  grid-template-columns: 1fr;
+  grid-template-rows: var(--perf-top, 1fr) var(--split-gutter) var(--perf-bottom, 1fr);
+}
+
+.pane { min-width: 0; min-height: 0; }
+.pane { overflow: hidden; }                           /* evita sovrapposizioni verticali */
+.pane > .lyrics, .pane > .chords { height: 100%; }   /* la scroll avviene nel figlio */
+
+.pane-lyrics { grid-area: lyrics; }
+.pane-chords { grid-area: chords; }
+
+.view-performance.is-split .lyrics.single,
+.view-performance.is-split .chords.single { display: none !important; }
+
+
+.stage-content.split-h .pane-lyrics { grid-column: 1; grid-row: 1; }
+.stage-content.split-h .split-handle  { grid-column: 2; grid-row: 1; }
+.stage-content.split-h .pane-chords   { grid-column: 3; grid-row: 1; }
+
+.stage-content.split-v .pane-lyrics { grid-column: 1; grid-row: 1; }
+.stage-content.split-v .split-handle  { grid-column: 1; grid-row: 2; }
+.stage-content.split-v .pane-chords { grid-column: 1; grid-row: 3; }
+
+.split-handle {
+  align-self: stretch;
+  justify-self: stretch;
+  background: color-mix(in oklab, var(--border) 70%, transparent);
+  border-radius: var(--divider-radius);
+  position: relative;
+}
+.split-handle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: .7;
+  background:
+    linear-gradient(90deg,
+      transparent 45%,
+      color-mix(in oklab, var(--perf-fg) 25%, transparent) 50%,
+      transparent 55%);
+}
+.stage-content.split-h .split-handle { cursor: col-resize; }
+.stage-content.split-v .split-handle { cursor: row-resize; }
+.split-handle.is-dragging {
+  background: color-mix(in oklab, var(--perf-fg) 14%, var(--border));
+}
+
+/* ——— Split container toggle ——— */
+.stage-content { display: none; }              /* off di default */
+.stage-content.is-on { display: grid; }        /* acceso quando in split */
+
+/* In split: nascondi i blocchi single (gestito da JS) */
+.view-performance.is-split .lyrics.single,
+.view-performance.is-split .chords.single {
+  display: none !important;
+}
+
+/* Assicura size coerenti in tutti i layout di split */
+.stage-content .lyrics .line {
+  font-size: var(--lyrics-size, 48px) !important;
+}
+.stage-content .chords .line span {
+  font-size: var(--chords-size, 28px) !important;
+}
+
+/* In split: padding più contenuto, evita effetti "finto centro" */
+.view-performance.is-split .lyrics,
+.view-performance.is-split .chords {
+  /* default per lo split, poi li sovrascriveremo via JS con px responsivi */
+  padding: var(--pad-top, 12vh) 4rem var(--pad-bottom, 14vh) 4rem;
+}
+
+/* Toolbar: pill attivo/animato per il tab corrente */
+.performance-toolbar .segmented .btn {
+  transition: background .18s ease, color .18s ease, box-shadow .18s ease, transform .12s ease;
+}
+
+.performance-toolbar .segmented .btn.active,
+.performance-toolbar .segmented .btn[aria-pressed="true"] {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px color-mix(in oklab, var(--accent) 30%, transparent);
+}
+
+.performance-toolbar .segmented .btn[aria-pressed="true"]:active {
+  transform: translateY(1px);
 }

@@ -10,6 +10,38 @@ export function initShell() {
     setState(s => { s.ui.drawerOpen = !s.ui.drawerOpen; });
   });
 
+// Chiudi drawer cliccando fuori
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  const insideDrawer = t?.closest?.('#app-drawer');
+  const onHamburger = t?.closest?.('#btn-hamburger');
+  if (store.ui.drawerOpen && !insideDrawer && !onHamburger) {
+    const drawer = document.getElementById('app-drawer');
+    // Se il focus è dentro il drawer, spostalo
+    if (drawer && drawer.contains(document.activeElement)) {
+      document.getElementById('btn-hamburger')?.focus();
+    }
+    drawer?.setAttribute('inert',''); // evita focus e interazioni
+    setState(s => { s.ui.drawerOpen = false; });
+  }
+});
+// Chiudi drawer quando navighi
+window.addEventListener('hashchange', () => {
+  const drawer = document.getElementById('app-drawer');
+  if (drawer && drawer.contains(document.activeElement)) {
+    document.getElementById('btn-hamburger')?.focus();
+  }
+  drawer?.setAttribute('inert','');
+  setState(s => { s.ui.drawerOpen = false; });
+});
+// Rimuovi inert quando si riapre
+subscribe(s => {
+  const drawer = document.getElementById('app-drawer');
+  if (!drawer) return;
+  const open = !!s.ui.drawerOpen;
+  drawer.toggleAttribute('inert', !open);
+});
+
     // CLICK sul lucchetto
   btnLock?.addEventListener('click', () => {
     setState(s => { s.ui.lock = !s.ui.lock; });

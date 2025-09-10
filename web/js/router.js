@@ -25,6 +25,9 @@ export function routerInit(rootEl) {
   function render() {
     const hash = location.hash || '#/setlist';
     setState(s => { s.ui.route = hash; });
+    // ogni cambio pagina chiude l'hamburger se aperto
+    setState(s => { s.ui.drawerOpen = false; });
+
     const view = routes[hash] || routes['#/setlist'];
     rootEl.replaceChildren(view());
   }

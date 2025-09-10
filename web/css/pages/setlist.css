@@ -239,18 +239,36 @@
   vertical-align: -1px;
 }
 
-/* Icona loop inline nel badge */
-.behavior-badge .icon {
-  width: 15px;
-  height: 15px;
-  vertical-align: -3.6px; /* allinea con il testo */
-  margin-right: 2px;
-  fill: currentColor;   /* usa il colore del testo (muted/accent) */
-  display: inline-block;
+/* Tutti i badge: vanno a capo e sono centrati */
+.behavior-badge {
+  display: block;            /* forza la nuova riga */
+  margin: 4px 0 0;
+  white-space: nowrap;
 }
 
-.behavior-badge svg { width: 16px; height: 16px; fill: currentColor; display: block; }
-.behavior-badge.is-loop { display: inline-flex; align-items: center; gap: 6px; }
+/* Icone sulla stessa riga (anche quando sono due per il Loop) */
+.behavior-badge svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  display: inline-block;     /* evita lo stack verticale */
+  vertical-align: middle;
+}
+
+/* Spaziatura solo tra più icone (Loop) */
+.behavior-badge svg + svg { margin-left: 6px; }
+
+/* Quando il badge è sulla sua riga, niente offset a sinistra */
+.song-meta .behavior-badge { margin-left: 0; }
+
+/* Allinea la "×N" alle icone */
+.behavior-badge .rep { margin-left: 4px; vertical-align: middle; }
+
+.song-meta strong{
+  font-size: 1.2rem;
+  margin-right: 1.5rem;
+}
+
 
 
 
@@ -323,3 +341,157 @@
   align-items: center;
   gap: 6px;      /* “qualche pixel di gap” tra Edit e Delete */
 }
+
+
+/* Empty import block */
+.empty-import {
+  display: grid;
+  width: 100%;
+  gap: 12px;
+  justify-items: center;
+  text-align: center;
+  padding: 28px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: rgba(255,255,255,.02);
+}
+.empty-import h3 { margin: 0; font-size: 18px; }
+.empty-import .muted { opacity: .8; }
+
+.dropzone {
+  width: 100%;
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 18px 16px;
+  transition: background .15s ease, border-color .15s ease;
+}
+
+
+/* ===== Global D&D import su Setlist ===== */
+.view-setlist {
+  position: relative;
+}
+
+/* Stato "sto trascinando un file sopra la pagina" */
+.view-setlist.is-dragover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px dashed var(--accent);
+  border-radius: 14px;
+  background:
+    radial-gradient(1200px 1200px at var(--mx,50%) var(--my,50%), rgba(106,169,255,0.12), transparent 60%),
+    rgba(255,255,255,0.03);
+  box-shadow: inset 0 0 0 1px rgba(106,169,255,0.25);
+  pointer-events: none;
+  transition: background .12s ease, box-shadow .12s ease;
+  animation: importPulse 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes importPulse {
+  from { box-shadow: inset 0 0 0 1px rgba(106,169,255,0.18); }
+  to   { box-shadow: inset 0 0 0 3px rgba(106,169,255,0.30); }
+}
+
+/* Drop hint centrale */
+.view-setlist .drop-hint {
+  position: absolute;
+  inset: 18% 10%;
+  display: none;
+  place-items: center;
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(4px);
+  color: var(--fg);
+  text-align: center;
+  pointer-events: none;
+}
+.view-setlist.is-dragover .drop-hint { display: grid; }
+.drop-hint p { margin: 0; font-size: 16px; opacity: .9; }
+
+/* Footer con bottone Import anche quando la setlist è popolata */
+.setlist-import-footer {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: rgba(255,255,255,.02);
+  display: flex;
+  justify-content: center;
+}
+
+ .view-setlist.is-dragover::after {
+  z-index: 10; /* assicurati che sia sopra agli item */
+ }
+ .view-setlist .drop-hint {
+  z-index: 11; /* l'hint sopra al velo */
+ }
+/* Mini spinner per pulsanti (12-16px) */
+.spinner-mini {
+  display: inline-block;
+  width: 16px; height: 16px;
+  margin-left: 8px;
+  border: 2px solid rgba(255,255,255,.35);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin .9s linear infinite;
+  vertical-align: -2px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Variante danger per i bottoni del modale */
+.modal-btn.danger {
+  border: 1px solid var(--danger);
+  color: #fff;
+}
+.modal-btn.danger:hover { filter: brightness(1.05); }
+
+.setlist-import-footer{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+.setlist-import-footer .footer-left,
+.setlist-import-footer .footer-right{ display:flex; align-items:center; gap:8px; }
+.btn.danger.ghost{
+  background: transparent;
+  color: #e5484d;
+  border: 1px solid rgba(229,72,77,.35);
+}
+.btn.danger.ghost:hover{
+  background: rgba(229,72,77,.08);
+  border-color: rgba(229,72,77,.55);
+}
+
+.btn.is-loading { opacity: .85; pointer-events: none; }
+.btn.is-loading .spinner-mini { margin-left: 8px; }
+
+/* Icone SVG uniformi nei bottoni */
+.icon-button svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+  fill: var(--fg);
+}
+
+/* (già presenti) .behavior-badge svg usa currentColor e size coerente */
+
+
+
+/* Setlist responsive tweaks */
+@media (max-width: 768px) {
+  .setlist-layout {
+    padding: 8px;
+    gap: 8px;
+  }
+  .setlist-sidebar { flex-basis: 100%; max-width: 100%; }
+  .setlist-item .title { font-size: 14px; }
+}
+
+  @media (max-width: 600px) {
+  /* Editor-only: quando wrap ha .split, mostra solo l'editor */
+  .view-setlist.split .setlist-sidebar { display: none !important; }
+  .view-setlist.split .setlist-body   { flex: 1 1 100%; max-width: 100%; }
+  }

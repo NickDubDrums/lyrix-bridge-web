@@ -10,7 +10,7 @@
 
   /* Titoli / indicatori (fallback se la Settings non li imposta) */
   --section-fg:        #b8c1ff;
-  --title-fg:          #eaeaea;
+  --title-fg:          #f2f2f2;
   --section-scale:     1.00;
   --title-scale:       1.00;
 

@@ -84,3 +84,20 @@
 .view-settings .switch input:checked + .ui::after{
   transform: translateX(18px);
 }
+
+
+.view-settings .sep { border:0; border-top:1px solid rgba(255,255,255,.08); margin:10px 0; }
+.view-settings .radio-row { grid-template-columns: 1fr auto; align-items:center; }
+.view-settings .radio-row > div label { font-weight: 500; }
+
+/* Segmented control (riutilizzato col modale) */
+.segmented { display:inline-flex; gap:2px; padding:3px; border-radius:999px;
+  background: color-mix(in oklab, var(--border, #2a2f3a) 70%, transparent); }
+.segmented .seg-item{
+  border:0; padding:8px 12px; border-radius:999px; cursor:pointer;
+  background: transparent; color: var(--fg); font-weight:600;
+}
+.segmented .seg-item.active{
+  background: var(--accent); color:#fff;
+  box-shadow: 0 2px 8px color-mix(in oklab, var(--accent) 30%, transparent);
+}
