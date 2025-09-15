@@ -8,8 +8,9 @@
     "dev": "HTTP_PORT=5173 node server.js"
   },
   "dependencies": {
+    "easymidi": "^3.1.0",
     "express": "^4.19.2",
-    "ws": "^8.18.0",
-    "osc": "^2.5.0"
+    "osc": "^2.4.5",
+    "ws": "^8.18.0"
   }
 }
