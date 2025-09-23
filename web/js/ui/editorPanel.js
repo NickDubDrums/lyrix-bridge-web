@@ -5,6 +5,35 @@ import { Realtime } from '../state/ws.js';
 
 const RE_SECTION = /^\s*\[([^\]]+)\]\s*$/;
 
+
+let listenTimer = null;
+function setListeningUI(on, phase = 'pc') {
+  if (on) {
+    $btnLearn.classList.add('primary', 'is-listening');
+    $btnLearn.disabled = true;
+    const label = phase === 'end' ? 'Listening END' : 'Listening';
+    $btnLearn.innerHTML = `${label}<span class="dots"></span>`;
+    const dotsEl = $btnLearn.querySelector('.dots');
+    let n = 0;
+    listenTimer && clearInterval(listenTimer);
+    listenTimer = setInterval(() => {
+      n = (n + 1) % 4; // 0..3
+      dotsEl.textContent = '.'.repeat(n);
+    }, 350);
+    $learnHint.textContent = phase === 'end'
+      ? 'Invia la NOTE END (C7 = 96) mentre Cubase è in play.'
+      : 'Fai PLAY in Cubase e invia il Program Change della song.';
+  } else {
+    listenTimer && clearInterval(listenTimer);
+    listenTimer = null;
+    $btnLearn.classList.remove('primary', 'is-listening');
+    $btnLearn.disabled = false;
+    $btnLearn.textContent = 'Learn (PC & Start)';
+    $learnHint.textContent = '';
+  }
+}
+
+
 // -------- Utilità caret/line/token ------------------------------------------
 function caretLine(textarea) {
   const pos = textarea.selectionStart ?? 0;
@@ -120,35 +149,45 @@ export function createEditorPanel(song, opts = {}) {
     <div class="tab-panels">
       <section class="tab-panel active" id="tab-meta">
         <div class="editor-block meta-block">
-          <div class="meta-grid">
-            <label>Title<input id="meta-title" type="text"></label>
-            <label>Artist<input id="meta-artist" type="text"></label>
-            <label>BPM<input id="meta-bpm" type="number" min="0" step="1"></label>
-            <label>Key<input id="meta-key" type="text" placeholder="e.g. Am"></label>
-            <label>Duration (mm:ss)<input id="meta-duration" type="text" placeholder="3:45"></label>
-            <label>End Mode
-              <select id="meta-behavior">
-                <option value="JumpToNext">Jump to next song</option>
-                <option value="StopAtEnd">Stop at end</option>
-                <option value="LoopSection">Loop section</option>
-              </select>
-            </label>
+    <div class="meta-grid">
+      <label>Title<input id="meta-title" type="text"></label>
+      <label>Artist<input id="meta-artist" type="text"></label>
+      <label>BPM<input id="meta-bpm" type="number" min="0" step="1"></label>
+      <label>Key<input id="meta-key" type="text" placeholder="e.g. Am"></label>
+      <label>Duration (mm:ss)<input id="meta-duration" type="text" placeholder="3:45"></label>
 
-            <label id="meta-repeats-wrap">Repeats
-              <input id="meta-repeats" type="number" min="1" step="1" placeholder="1">
-            </label>
+      <label>End Mode
+        <select id="meta-behavior">
+          <option value="JumpToNext">Jump to next song</option>
+          <option value="StopAtEnd">Stop at end</option>
+          <option value="LoopSection">Loop section</option>
+        </select>
+      </label>
 
-            <label id="meta-loopexit-wrap">Loop Exit
-              <select id="meta-loop-exit">
-                <option value="finish">At End Of Loop</option>
-                <option value="bar">1 Bar</option>
-                <option value="Instant">Instant</option>
-              </select>
-            </label>
+      <label id="meta-repeats-wrap">Repeats
+        <input id="meta-repeats" type="number" min="1" step="1" placeholder="1">
+      </label>
 
+      <label id="meta-loopexit-wrap">Loop Exit
+        <select id="meta-loop-exit">
+          <option value="finish">At End Of Loop</option>
+          <option value="bar">1 Bar</option>
+          <option value="Instant">Instant</option>
+        </select>
+      </label>
 
-          </div>
-        </div>
+      <!-- NEW: Mapping / Locate -->
+      <label>Program (PC)<input id="meta-pc" type="number" min="0" max="127" step="1"></label>
+      <label>MIDI Channel<input id="meta-ch" type="number" min="0" max="15" step="1"></label>
+      <label>Start Bar<input id="meta-startbars" type="number" min="0" step="1"></label>
+      <label>Meter Num<input id="meta-num" type="number" min="1" step="1"></label>
+      <label>Meter Den<input id="meta-den" type="number" min="1" step="1"></label>
+
+      <div class="row" style="grid-column:1 / -1; display:flex; gap:8px;">
+        <button id="btn-learn" class="btn">Learn (PC & Start)</button>
+        <span class="muted" id="learn-hint" style="align-self:center;"></span>
+      </div>
+    </div>
       </section>
 
       <section class="tab-panel" id="tab-lyrics">
@@ -232,6 +271,18 @@ export function createEditorPanel(song, opts = {}) {
   const $lyrCurrent = root.querySelector('#lyric-current');
   const $car = root.querySelector('#chords-carousel');
 
+  const $metaPC        = root.querySelector('#meta-pc');
+  const $metaCh        = root.querySelector('#meta-ch');
+  const $metaStartBars = root.querySelector('#meta-startbars');
+  const $metaNum       = root.querySelector('#meta-num');
+  const $metaDen       = root.querySelector('#meta-den');
+  const $btnLearn      = root.querySelector('#btn-learn');
+  const $learnHint     = root.querySelector('#learn-hint');
+  $btnLearn.setAttribute('type','button');
+
+  
+
+
   // --- Init contenuti --------------------------------------------------------
   $metaTitle.value = meta.title;
   $metaArtist.value = meta.artist;
@@ -241,6 +292,15 @@ export function createEditorPanel(song, opts = {}) {
   $metaBehavior.value = meta.arranger.mode;
   $metaRepeats.value  = meta.arranger.repeats;
   $metaLoopExit.value = meta.arranger.loopExit; // ⬅️ NEW
+
+  $btnLearn.classList.remove('primary', 'danger'); // spento
+  $learnHint.textContent = '';
+
+  $metaPC.value        = Number(song.programChange ?? 0);
+  $metaCh.value        = Number(song.midiChannel   ?? 0);
+  $metaStartBars.value = Number(song.startBars     ?? 0);
+  $metaNum.value       = Number(song.meter?.num    ?? 4);
+  $metaDen.value       = Number(song.meter?.den    ?? 4);
 
 
 
@@ -283,6 +343,9 @@ $btnExport.addEventListener('click', () => {
   const title = (store.data.songs[id]?.title || id).replace(/\s+/g, '-');
   downloadJSON(`${title}.lyrix-song.json`, payload);
 
+  Realtime.send('learn/cancel');
+
+
   $btnExport.textContent = 'Exported ✓';
   setTimeout(() => $btnExport.textContent = 'Export Song', 900);
 });
@@ -304,6 +367,64 @@ $btnExport.addEventListener('click', () => {
     updateUnderline();
   }
   $tabs.forEach(b => b.addEventListener('click', () => setActiveTab(b.dataset.tab)));
+
+// Click Learn: arma senza refresh
+$btnLearn.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation();
+  Realtime.send('learn/arm', { id: song.id });
+  setListeningUI(true, 'pc');
+});
+
+// Auto-disarmo/aggiornamento dal server
+Realtime.on?.('message', (msg) => {
+    if (msg?.type === 'learn/status') {
+    const on    = !!msg.status?.active && msg.status?.songId === song.id;
+    const phase = msg.status?.phase || 'pc'; // 'awaitEnd' => END
+    setListeningUI(on, phase === 'awaitEnd' ? 'end' : 'pc');
+  }
+  // ... (blocchi già presenti per learn/status) ...
+  if (msg?.type === 'song/patch' && msg.id === song.id && msg.patch) {
+    const p = msg.patch;
+    if ('programChange' in p && document.activeElement !== $metaPC) $metaPC.value = Number(p.programChange);
+    if ('startBars'     in p && document.activeElement !== $metaStartBars) $metaStartBars.value = Number(p.startBars);
+    if ('meter'         in p) {
+      if (document.activeElement !== $metaNum) $metaNum.value = Number(p.meter?.num ?? $metaNum.value);
+      if (document.activeElement !== $metaDen) $metaDen.value = Number(p.meter?.den ?? $metaDen.value);
+    }
+    if ('bpm' in p && Number(p.bpm) && document.activeElement !== $metaBpm) $metaBpm.value = Number(p.bpm);
+    if ('duration' in p && !$metaDur.matches(':focus')) {
+      const m = Math.floor(p.duration / 60), s2 = p.duration % 60;
+      $metaDur.value = `${m}:${String(s2).padStart(2,'0')}`;
+    }
+  }
+});
+
+const unsubStore = subscribe((s) => {
+  const updated = s.data?.songs?.[song.id];
+  if (!updated) return;
+
+  // Aggiorna i campi mapping se non li stai editando in quel momento
+  if (document.activeElement !== $metaPC)        $metaPC.value        = Number(updated.programChange ?? $metaPC.value);
+  if (document.activeElement !== $metaCh)        $metaCh.value        = Number(updated.midiChannel   ?? $metaCh.value);
+  if (document.activeElement !== $metaStartBars) $metaStartBars.value = Number(updated.startBars     ?? $metaStartBars.value);
+  if (document.activeElement !== $metaNum)       $metaNum.value       = Number(updated.meter?.num    ?? $metaNum.value);
+  if (document.activeElement !== $metaDen)       $metaDen.value       = Number(updated.meter?.den    ?? $metaDen.value);
+  if (document.activeElement !== $metaBpm && Number(updated.bpm)) $metaBpm.value = Number(updated.bpm);
+
+  // se la durata è stata appresa al CUE.END
+  if (updated.duration && !$metaDur.matches(':focus')) {
+    const m = Math.floor(updated.duration / 60), s2 = updated.duration % 60;
+    $metaDur.value = `${m}:${String(s2).padStart(2,'0')}`;
+  }
+});
+root.addEventListener('DOMNodeRemoved', (e) => {
+  if (e.target === root) unsubStore?.();
+  Realtime.send('learn/cancel');
+
+});
+
 
   // --- Lock handling ---------------------------------------------------------
   function applyLock(on) {
@@ -483,6 +604,15 @@ $btnSave.addEventListener('click', () => {
     duration: Number.isFinite(durationSec) ? durationSec : song.duration
   });
 
+  Realtime.send('song/updateMapping', {
+  id: song.id,
+  programChange: Number($metaPC.value),
+  midiChannel: Number($metaCh.value),
+  startBars: Number($metaStartBars.value),
+  meter: { num: Number($metaNum.value), den: Number($metaDen.value) }
+});
+
+
   // 4) Behavior / Arranger
   const rep = Math.max(1, parseInt($metaRepeats.value || '1', 10));
   const settings = { arranger: { mode: $metaBehavior.value, repeats: rep } };
@@ -501,7 +631,10 @@ $btnSave.addEventListener('click', () => {
   $btnSave.textContent = 'Saved ✓';
   setTimeout(() => $btnSave.textContent = 'Save Song', 900);
   // (facoltativo) aggiornare subito la lista visiva se necessario:
-  window.dispatchEvent(new HashChangeEvent('hashchange'));
+  //window.dispatchEvent(new HashChangeEvent('hashchange'));
+
+  Realtime.send('learn/cancel');
+
 });
 
 $btnClose.addEventListener('click', () => {
@@ -532,6 +665,18 @@ $btnClose.addEventListener('click', () => {
     lyricsText: $taL.value,
     chordsText: $taC.value
   });
+
+  Realtime.send('song/updateMapping', {
+  id: song.id,
+  programChange: Number($metaPC.value),
+  midiChannel: Number($metaCh.value),
+  startBars: Number($metaStartBars.value),
+  meter: { num: Number($metaNum.value), den: Number($metaDen.value) }
+});
+
+Realtime.send('learn/cancel');
+
+
 
   // Chiudi editor
   setState(s => { s.ui.editorOpen = false; s.ui.editorSongId = null; });

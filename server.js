@@ -16,16 +16,24 @@ const MIDI_OUT_NAME = String(process.env.MIDI_OUT || 'Lyrix Control');
 const MIDI_IN_NAME  = String(process.env.MIDI_IN  || 'Lyrix Learn'); // senza "s", combacia con loopMIDI
 const MIDI_CH       = Number(process.env.MIDI_CH  || 0);
 
-
-
 const USE_MMC = process.env.USE_MMC === '1';
-// poi chiama mmcPlay/mmcStop solo se (USE_MMC && midiOut)
 
-// Mappa auto-learn: program (0..127) -> { bars, num, den }
-const pcMap = {};  // es: { 0: { bars:0, num:4, den:4 }, 1:{ bars:64, num:4, den:4 } }
+// === Transport mode ===
+const USE_MMC_LOCATE = true;     // usa MMC Locate invece di SPP
+const MMC_FPS = 30;              // 24|25|29.97|30 -> codifica nel byte delle ore
 
-const PLUGIN_LISTEN_PORT = 9001;        // porta su cui il plugin riceve /reqpos
-let lastPC = { program: null, ts: 0 };   // per accoppiare PC → /pos
+// === Learn policy ===
+const LEARN_ONLY_WHEN_PLAYING = true; // evita chase da stop
+const LEARN_FIRST_WINS = true;        // non sovrascrivere se già mappato
+
+// === Stato learn (associazione PC<->/pos)
+const PLUGIN_LISTEN_PORT = 9001;
+let lastPC = { program: null, ts: 0 };
+let lastLocate = { program: null, tSec: -1, ts: 0 };
+
+// Mappa program -> { bars, num, den, bpm, learnedAt }
+const pcMap = {};
+
 
 
 function sppFromBars(bars, num, den) {
@@ -100,6 +108,28 @@ const state = {
   lastEvent: '',
 };
 
+// Stato Learn per una singola song corrente
+const learn = {
+  active: false,
+  songId: null,
+  awaitingEnd: false,             // true dopo CUE.END: attendiamo /pos per calcolare durata
+  start: null,                    // { bars, bpm, num, den, ts }
+};
+
+function broadcastLearn(status) {
+  if (!wss) return;
+  const payload = JSON.stringify({ type: 'learn/status', status });
+  wss.clients.forEach(c => { if (c.readyState === 1) c.send(payload); });
+}
+
+function broadcastPatch(id, patch) {
+  if (!wss) return;
+  const payload = JSON.stringify({ type: 'song/patch', id, patch });
+  wss.clients.forEach(c => { if (c.readyState === 1) c.send(payload); });
+}
+
+
+
 // WebSocket server (lo dichiariamo qui per usarlo nei helper “safe”)
 let wss = null;
 
@@ -168,16 +198,25 @@ if (midiIn) {
       broadcastCue('start', { songId });
       return;
     }
+
     // END (obbligatorio)
     if (msg.note === CUE.END) {
       const songId = getCurrentSongId();
       const loops = incLoopCount(songId);
       broadcastCue('end', { songId, loopCount: loops });
+
+      // se sto facendo learn sulla stessa song, chiedi la posizione per calcolare la durata
+      if (learn.active && state.currentSongId === learn.songId) {
+        try { oscUDP && oscUDP.send({ address: "/reqpos" }, "127.0.0.1", PLUGIN_LISTEN_PORT); } catch {}
+        learn.awaitingEnd = true;
+      }
       return;
     }
-    // ...altri comandi note del tuo pedale se vuoi...
+
   });
 }
+
+
 if (midiIn) {
   midiIn.on('program', (msg) => {
     const prog = Number(msg.number ?? -1);
@@ -229,6 +268,70 @@ function mmcStop()  { sendSysex([0xF0,0x7F,0x7F,0x06,0x01,0xF7]); console.log('[
 function mmcPause() { sendSysex([0xF0,0x7F,0x7F,0x06,0x09,0xF7]); console.log('[MMC] Pause'); }
 
 // ---------- SPP + LOCATE ----------
+// ===== MMC LOCATE =====
+
+function mmcLocateTimecode({ hours=0, minutes=0, seconds=0, frames=0, subframes=0, fps=MMC_FPS }) {
+  if (!midiOut) return;
+  const rateCode = (fps === 24) ? 0 : (fps === 25) ? 1 : (fps === 29.97) ? 2 : 3;
+  const hrByte = ((hours & 0x1F) | ((rateCode & 0x03) << 5)) & 0x7F;
+  const mn = Math.max(0, Math.min(59, minutes)) & 0x7F;
+  const sc = Math.max(0, Math.min(59, seconds)) & 0x7F;
+  const fr = Math.max(0, Math.min((fps===29.97?29:fps-1), frames)) & 0x7F;
+  const ff = Math.max(0, Math.min(99, subframes)) & 0x7F;
+  // F0 7F 7F 06 44 06 01 <hr> <mn> <sc> <fr> <ff> F7
+  midiOut.send('sysex', [0xF0,0x7F,0x7F,0x06,0x44,0x06,0x01, hrByte, mn, sc, fr, ff, 0xF7]);
+  console.log(`[MIDI] MMC LOCATE -> ${hours}:${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}:${String(frames).padStart(2,'0')} @${fps}fps`);
+}
+
+function barsToTime({ bars, bpm, num, den }) {
+  const secPerBar = (60 / Math.max(1, bpm||120)) * (num * (4/den));
+  const totalSec = Math.max(0, bars) * secPerBar;
+  const hours   = Math.floor(totalSec / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = Math.floor(totalSec % 60);
+  return { hours, minutes, seconds };
+}
+
+function locateToProgram(program, { autoplay = false } = {}) {
+  const m = pcMap[Number(program)];
+  if (!m) { console.warn('[LOCATE] no mapping for program', program); return; }
+
+  const now = Date.now();
+  const tSecFloat = Number.isFinite(m.posSec) ? Number(m.posSec) : NaN;
+  if (Number.isFinite(tSecFloat)) {
+    if (lastLocate.program === program && Math.abs((lastLocate.tSec || 0) - tSecFloat) < 0.05 && (now - (lastLocate.ts||0)) < 500) {
+      return;
+    }
+    lastLocate = { program, tSec: tSecFloat, ts: now };
+  }
+
+ // 1) ABS time dal plugin (robusto con BPM variabili)
+  if (Number.isFinite(tSecFloat)) {
+    const hours   = Math.floor(tSecFloat / 3600);
+    const minutes = Math.floor((tSecFloat % 3600) / 60);
+    const seconds = Math.floor(tSecFloat % 60);
+
+    const frac    = tSecFloat - Math.floor(tSecFloat);     // quota frazionaria
+    const frames  = Math.floor(frac * MMC_FPS);            // 0..fps-1
+    const subf    = Math.floor(((frac * MMC_FPS) - frames) * 100); // 0..99
+
+    mmcStop();
+    setTimeout(() => mmcLocateTimecode({ hours, minutes, seconds, frames, subframes: subf, fps: MMC_FPS }), 80);
+    if (autoplay) setTimeout(() => mmcPlay(), 160);
+
+    console.log(`[LOCATE] program=${program} @ABS ${hours}:${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}.${String(frames).padStart(2,'0')} autoplay=${autoplay}`);
+    return;
+  }
+
+   // 2) Fallback: stima da barre (se non abbiamo posSec)
+  const t = barsToTime({ bars: m.bars, bpm: m.bpm || 120, num: m.num || 4, den: m.den || 4 });
+  mmcStop();
+  setTimeout(() => mmcLocateTimecode({ ...t, frames: 0, subframes: 0, fps: MMC_FPS }), 80);
+  if (autoplay) setTimeout(() => mmcPlay(), 160);
+
+  console.log(`[LOCATE] program=${program} bars=${m.bars} ${m.num}/${m.den} bpm=${m.bpm||'?'} -> ${t.hours}:${t.minutes}:${t.seconds} @${MMC_FPS}fps autoplay=${autoplay}`);
+}
+
 function sendSPP(spp) {
   if (!midiOut) return;
   try { midiOut.send('position', { value: spp }); }
@@ -237,22 +340,6 @@ function sendSPP(spp) {
     catch (e2) { console.warn('[MIDI] SPP failed:', e1.message, '|', e2.message); }
   }
   console.log('[MIDI] SPP ->', spp);
-}
-
-// Se autoplay=true: Stop -> SPP -> Play
-function locateToProgram(program, { autoplay = false } = {}) {
-  const m = pcMap[Number(program)];
-  if (!m) { console.warn('[LOCATE] no mapping for program', program); return; }
-  const spp = sppFromBars(m.bars, m.num, m.den);
-
-  // Stop sempre prima di un locate
-  mmcStop();
-
-  // Piccoli delay per sicurezza
-  setTimeout(() => sendSPP(spp), 80);
-  if (autoplay) setTimeout(() => mmcPlay(), 160);
-
-  console.log(`[LOCATE] program=${program} bars=${m.bars} ${m.num}/${m.den} -> spp=${spp} autoplay=${autoplay}`);
 }
 
 
@@ -309,23 +396,74 @@ try {
         return;
       }
 
-        // /pos <bars:float> <ppq:float> <bpm:float> <num:int> <den:int>
-        if (m.address === "/pos") {
-          const bars = Math.floor(Number(m.args?.[0] ?? -1));
-          const num  = Number(m.args?.[3] ?? 4);
-          const den  = Number(m.args?.[4] ?? 4);
-          const age  = Date.now() - (lastPC.ts || 0);
+    // /pos <bars:float> <ppq:float> <bpm:float> <num:int> <den:int> <playing:int> [timeSec:float]
+    if (m.address === "/pos") {
+      const bars    = Math.floor(Number(m.args?.[0] ?? -1));
+      const bpm     = Number(m.args?.[2] ?? 0);
+      const num     = Number(m.args?.[3] ?? 4);
+      const den     = Number(m.args?.[4] ?? 4);
+      const playing = Number(m.args?.[5] ?? 0) === 1;
+      const timeSec = Number(m.args?.[6] ?? -1);   // <<< NEW: tempo assoluto dal plugin
+      const age     = Date.now() - (lastPC.ts || 0);
+      const prog    = lastPC.program;
 
-          console.log('[OSC] /pos bars=', bars, 'num/den=', num, '/', den, '(age', age, 'ms)');
+      console.log('[OSC] /pos bars=', bars, 'num/den=', num, '/', den, 'bpm=', bpm, 'playing=', playing, 'tSec=', timeSec, '(age', age, 'ms)');
 
-          if (lastPC.program != null && age < 1500 && bars >= 0) {
-            pcMap[lastPC.program] = { bars, num, den };
-            console.log(`[PC-MAP] prog=${lastPC.program} -> bars=${bars}  ${num}/${den}`);
-          } else {
-            console.log('[PC-MAP] ignorato: manca PC recente o bars invalid');
+      if (learn.active) {
+        const i = idxById(learn.songId);
+        if (i >= 0 && playing && bars >= 0) {
+          const song = state.setlist[i];
+
+          // Fase 1: START (subito dopo il PC)
+          if (!learn.awaitingEnd && prog != null && age < 1500) {
+            pcMap[prog]        = { bars, num, den, bpm, posSec: (timeSec >= 0 ? timeSec : undefined), learnedAt: Date.now() };
+            song.programChange = prog;
+            song.midiChannel   = song.midiChannel ?? MIDI_CH;
+            song.meter         = { num, den };
+            if (!song.bpm && bpm > 0) song.bpm = bpm;
+            song.startBars     = bars;
+            state.currentSong  = song;
+
+            learn.start = { bars, bpm: (bpm || song.bpm || 120), num, den, ts: Date.now() };
+            learn.awaitingEnd = true;
+            lastPC = { program: null, ts: 0 };
+
+            // niente broadcastState (evita refresh). Aggiorna solo l’editor.
+            broadcastPatch(song.id, {
+              programChange: prog, startBars: bars, meter: { num, den }, bpm: song.bpm
+            });
+            broadcastLearn({ active: true, songId: learn.songId, phase: 'awaitEnd' });
+            return;
           }
-          return;
+
+          // Fase 2: END -> durata (dopo NOTE END + /reqpos)
+          if (learn.awaitingEnd && learn.start) {
+            const refBpm = bpm || learn.start.bpm || song.bpm || 120;
+            const refNum = num || learn.start.num || song.meter?.num || 4;
+            const refDen = den || learn.start.den || song.meter?.den || 4;
+            const secPerBar = (60 / refBpm) * (refNum * (4 / refDen));
+            const durSec = Math.max(1, Math.round(Math.max(0, bars - learn.start.bars) * secPerBar));
+
+            song.duration = durSec;
+            state.currentSong = song;
+
+            learn.active = false;
+            learn.songId = null;
+            learn.awaitingEnd = false;
+            learn.start = null;
+
+            // niente broadcastState; patch mirata + learn OFF
+            broadcastPatch(song.id, { duration: durSec });
+            broadcastLearn({ active: false, phase: 'endDone', duration: durSec });
+            return;
+          }
         }
+        return; // learn attivo ma /pos non rilevante
+      }
+
+      console.log('[PC-MAP] ignorato (learn OFF)');
+      return;
+    }
 
 
 
@@ -485,14 +623,16 @@ function selectSongByIndex(i) {
   state.currentChordIndex = 0;
 
   // Program Change opzionale (se MIDI attivo)
-  const pc = Number(song.programChange ?? (idx + 1)) - 1;
+  const pc = Number(song.programChange ?? idx);
   sendPC(pc);
 
-  // >>> aggiungi questo salto:
+ if (!pcMap[pc]){
   sendSongJump(idx, MIDI_CH);
+ }
 
   broadcastState();
 }
+
 function selectSongById(id) {
   const i = idxById(id);
   if (i >= 0) selectSongByIndex(i);
@@ -667,6 +807,53 @@ case 'song/updateMeta': {
   break;
 }
 
+// Arma il learn per la song indicata
+case 'learn/arm': {
+  const { id } = msg;
+  if (!id) break;
+  learn.active = true;
+  learn.songId = id;
+  learn.awaitingEnd = false;
+  learn.start = null;
+  lastPC = { program: null, ts: 0 };
+  state.lastEvent = 'Learn armed';
+  broadcastLearn({ active: true, songId: id });
+  break;
+}
+
+// Annulla learn
+case 'learn/cancel': {
+  learn.active = false;
+  learn.songId = null;
+  learn.awaitingEnd = false;
+  learn.start = null;
+  broadcastLearn({ active: false });
+  state.lastEvent = 'Learn cancelled';
+  break;
+}
+
+// Aggiorna mapping manuale da editor (PC, CH, StartBar, Meter)
+case 'song/updateMapping': {
+  const { id, programChange, midiChannel, startBars, meter } = msg;
+  const i = state.setlist.findIndex(s => s && s.id === id);
+  if (i < 0) break;
+  const old = state.setlist[i] || {};
+  state.setlist[i] = {
+    ...old,
+    programChange: Number.isFinite(Number(programChange)) ? Number(programChange) : old.programChange,
+    midiChannel: Number.isFinite(Number(midiChannel)) ? Number(midiChannel) : (old.midiChannel ?? MIDI_CH),
+    startBars: Number.isFinite(Number(startBars)) ? Number(startBars) : old.startBars,
+    meter: {
+      num: Number(meter?.num ?? old?.meter?.num ?? 4),
+      den: Number(meter?.den ?? old?.meter?.den ?? 4),
+    }
+  };
+  state.lastEvent = 'Song mapping saved';
+  broadcastState();
+  break;
+}
+
+
 // Avvia per program (0..127)
 case 'play_song': {
   const program = Number(msg.program ?? -1);
@@ -680,6 +867,8 @@ case 'locate_program': {
   if (program >= 0) locateToProgram(program, { autoplay: false });
   break;
 }
+
+
 
 
 
@@ -744,6 +933,21 @@ case 'locate_program': {
         }
         state.transport.playing = true;
         state.transport.playingSongId = state.currentSongId || null;
+
+        // locate sull’attuale selected song se è mappata
+        const i = idxById(state.currentSongId);
+        if (i >= 0) {
+          const pc = Number(state.setlist[i]?.programChange ?? i);
+          if (pcMap[pc]) {
+            locateToProgram(pc, { autoplay: true });
+          } else {
+            // fallback: jump + play
+            sendSongJump(i, MIDI_CH);
+            mmcPlay();
+          }
+          break;
+        }
+
 
         // Se stavamo "queuando" proprio questo brano, azzera la coda
         if (state.transport.queuedSongId === state.currentSongId) {
@@ -810,7 +1014,16 @@ case 'locate_program': {
       case 'transport/next': {
         selectNext(); // cambia currentSongId + broadcast
         const i = idxById(state.currentSongId);
-        sendSongJump(i, MIDI_CH);
+        const pc = Number(state.setlist[i]?.programChange ?? i);
+        //sendSongJump(i, MIDI_CH);
+        setTimeout(() => {
+        if (pcMap[pc]) {
+          locateToProgram(pc, { autoplay: state.transport.playing });
+        } else {
+          sendSongJump(i, MIDI_CH);
+          if (state.transport.playing) mmcPlay();
+        }
+      }, 200);
 
         if (state.transport.playing) {
           state.transport.playingSongId = state.currentSongId;
@@ -830,7 +1043,16 @@ case 'locate_program': {
       case 'transport/prev': {
         selectPrev(); // cambia currentSongId + broadcast
         const i = idxById(state.currentSongId);
-        sendSongJump(i, MIDI_CH);
+        //sendSongJump(i, MIDI_CH);
+        const pc = Number(state.setlist[i]?.programChange ?? i);
+        setTimeout(() => {
+          if (pcMap[pc]) {
+            locateToProgram(pc, { autoplay: state.transport.playing });
+          } else {
+            sendSongJump(i, MIDI_CH);
+            if (state.transport.playing) mmcPlay();
+          }
+        }, 200);
 
         if (state.transport.playing) {
           state.transport.playingSongId = state.currentSongId;
@@ -930,64 +1152,34 @@ case 'editor/apply': {
         break;
       }
       // dentro ws.on('message'):
-      case 'song/selectById': {
-        const { id, autoplay } = msg;
-        if (id) {
-          // seleziona
-          const i = idxById(id);
-          if (i >= 0) {
-            selectSongByIndex(i); // aggiorna stato + PC + broadcast
-            // Salto a marker via nota (C1 + index)
+case 'song/selectById': {
+  const { id, autoplay } = msg;
+  if (!id) break;
 
-            // Se ho mappatura PC, uso locate SPP invece della nota fake
-            const songSel = state.currentSong;
-            const pc = Number(songSel?.programChange ?? (i + 1)) - 1;
-            const hasMap = Number.isFinite(pc) && pcMap[pc];
+  const i = idxById(id);
+  if (i < 0) break;
 
-            if (hasMap) {
-              locateToProgram(pc, { autoplay: !!(state.transport.playing || autoplay) });
-              // se ho usato locate, non serve la nota di jump
-            } else {
-              // fallback attuale
-              sendSongJump(i, MIDI_CH);
-              if (state.transport.playing || autoplay) mmcPlay();
-            }
-            state.lastEvent = autoplay ? 'Select song (playing)' : 'Select song';
-            broadcastState();
-            break;
+  // 1) Seleziona (stato + PC + eventuale jump se non mappata)
+  selectSongByIndex(i);
 
-            sendSongJump(i, MIDI_CH);
+  const songSel = state.currentSong;
+  const pc = Number(songSel?.programChange ?? i);
+  const doAutoplay = !!(state.transport.playing || autoplay);
 
-            if (state.transport.playing || autoplay) {
-              state.transport.playingSongId = state.currentSongId;
-              state.transport.startedAt = Date.now();
+  // 2) dopo un attimo prova locate MMC; se non mappata → fallback jump
+  setTimeout(() => {
+    if (pcMap[pc]) {
+      locateToProgram(pc, { autoplay: doAutoplay });
+    } else {
+      sendSongJump(i, MIDI_CH);
+      if (doAutoplay) mmcPlay();
+    }
+  }, 200);
 
-              // pulisci coda/blink
-              state.transport.pendingNextAfterLoop = false;
-              state.transport.loopExitMode = null;
-              state.transport.queuedSongId = null;
-
-              // avvia trasporto (MMC)
-              mmcPlay();
-              state.lastEvent = 'Select song (playing)';
-              broadcastState();
-            } else {
-              // non in play: resti posizionato sul marker
-              state.transport.playingSongId = null;
-              state.transport.startedAt = 0;
-
-              // pulisci coda/blink
-              state.transport.pendingNextAfterLoop = false;
-              state.transport.loopExitMode = null;
-              state.transport.queuedSongId = null;
-
-              state.lastEvent = 'Select song';
-              broadcastState();
-            }
-          }
-        }
-        break;
-      }
+  state.lastEvent = doAutoplay ? 'Select song (playing)' : 'Select song';
+  broadcastState();
+  break;
+}
 
 
       case 'state/resetDemo': {
